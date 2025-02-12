@@ -1,9 +1,9 @@
 # CSSpectrum Chrome Extension
 
-![Code size](https://custom-icon-badges.demolab.com/github/languages/code-size/ganemedelabs/csspectrum?logo=file-code&logoColor=white)
+![Code size](https://custom-icon-badges.demolab.com/github/languages/code-size/ganemedelabs/csspectrum-chrome-extension?logo=file-code&logoColor=white)
 ![Webpack](https://custom-icon-badges.demolab.com/badge/Built%20with-Webpack-8DD6F9.svg?logo=webpack&logoColor=white)
 ![JavaScript](https://custom-icon-badges.demolab.com/badge/JavaScript-Vanilla-F7DF1E.svg?logo=javascript&logoColor=white)
-![License](https://custom-icon-badges.demolab.com/github/license/ganemedelabs/csspectrum?logo=law)
+![License](https://custom-icon-badges.demolab.com/github/license/ganemedelabs/csspectrum-chrome-extension?logo=law)
 
 CSSpectrum is a Chrome extension that enriches your browsing experience by detecting and highlighting color values on web pages—whether they're CSS color names, hex codes, RGB(A), or HSL(A). Each color is showcased in its true hue, and you can click on them to seamlessly switch between different color formats.
 
@@ -64,7 +64,7 @@ CSSpectrum will soon support additional **CSS color models**, including:
 
 1. Clone the repository or download the zip file:
     ```bash
-    git clone https://github.com/ganemedelabs/csspectrum.git
+    git clone https://github.com/ganemedelabs/csspectrum-chrome-extension.git
     ```
 2. Navigate to the project directory and run these commands to install dependencies and build the project:
     ```bash
