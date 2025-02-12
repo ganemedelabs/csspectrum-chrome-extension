@@ -17,7 +17,7 @@ import Color from "./Color";
  * 4. Adds a click event listener to the `<mark>` elements to cycle through color representations.
  * 5. Replaces the original text node with a document fragment containing the processed content.
  */
-function processTextNode(textNode: Text) {
+function processTextNode(textNode: Text, modern = false) {
     const text = textNode.nodeValue;
     if (!text) return;
 
@@ -55,7 +55,7 @@ function processTextNode(textNode: Text) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = new Color().fromUnknown(colorString).getRGB();
+        const bgColor = new Color().fromUnknown(colorString).getRGB(false);
         const isNamedColor = colorPatterns.named.test(matchText);
         const pageBgColor = window.getComputedStyle(document.body).backgroundColor;
 
@@ -79,7 +79,7 @@ function processTextNode(textNode: Text) {
             }
 
             let nextColor, nextIndex;
-            const colorClass = new Color();
+            const colorClass = new Color({ modern });
 
             const originalNamedColor = wrapper.getAttribute("data-csspectrum-name") || undefined;
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
@@ -114,33 +114,39 @@ function processTextNode(textNode: Text) {
  * @param node - The DOM node to process.
  * @returns A promise that resolves when the node and its children have been processed.
  */
-async function processNode(node: Node): Promise<void> {
+async function processNode(node: Node, modern: boolean): Promise<void> {
     if (node.nodeType === Node.TEXT_NODE) {
-        processTextNode(node as Text);
+        processTextNode(node as Text, modern);
     } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const excludedTags: string[] = ["SCRIPT", "STYLE", "NOSCRIPT", "SVG"];
+        const excludedTags = ["SCRIPT", "STYLE", "NOSCRIPT", "SVG"];
         if (!excludedTags.includes((node as Element).tagName)) {
             for (const child of Array.from(node.childNodes)) {
-                await processNode(child);
+                await processNode(child, modern);
             }
         }
     }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    chrome.storage.sync.get({ enabled: true }, (result) => {
+    chrome.storage.sync.get({ enabled: true, modern: false }, (result) => {
         if (result.enabled) {
-            processNode(document.body);
+            processNode(document.body, result.modern);
         }
     });
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "sync" && changes.enabled) {
-        const newValue = changes.enabled.newValue;
-        if (newValue) {
-            processNode(document.body);
-        } else {
+    if (area === "sync") {
+        const newEnabled = changes.enabled ? changes.enabled.newValue : null;
+        const newModern = changes.modern ? changes.modern.newValue : null;
+
+        if (newEnabled !== null) {
+            if (newEnabled) {
+                processNode(document.body, newModern);
+            } else {
+                window.location.reload();
+            }
+        } else if (newModern !== null) {
             window.location.reload();
         }
     }

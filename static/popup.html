@@ -2,14 +2,44 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <title>Extension Toggle</title>
+        <title>CSSpectrum</title>
         <link rel="stylesheet" href="popup.css" />
     </head>
     <body>
-        <label>
-            <input type="checkbox" id="toggle" />
-            Enable Color Processor
-        </label>
+        <h2>CSSpectrum</h2>
+
+        <div class="toggle-container">
+            <label for="toggle" class="toggle-label">
+                Enable Color Highlighting
+                <div class="toggle" role="switch" aria-checked="false">
+                    <input type="checkbox" id="toggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+        </div>
+
+        <div class="toggle-container">
+            <label for="modernToggle" class="toggle-label">
+                Use Modern Color Syntax for RGB and HSL
+                <div class="toggle" role="switch" aria-checked="false">
+                    <input type="checkbox" id="modernToggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+            <div style="opacity: 0.8; line-height: 1.3rem">
+                e.g., <code>rgba(255, 0, 153, 0.8)</code> instead of <code>rgb(255 0 153 / 80%)</code> and
+                <code>hsla(150, 30%, 60%, 0.8)</code> instead of <code>hsl(150 30% 60% / 80%)</code>
+            </div>
+        </div>
+
+        <div id="toggle-description" class="info-box" role="region">
+            <p><strong>Tip:</strong> Click on a highlighted color to convert it to the next format.</p>
+            <p>
+                <strong>Note:</strong> If the color string is a link, clicking on it will convert the color instead of
+                opening the link. To open the link, hold <code>CTRL</code> while clicking.
+            </p>
+        </div>
+
         <script src="popup.bundle.js"></script>
     </body>
 </html>

@@ -181,6 +181,25 @@ class Color {
     private name: string | undefined;
 
     /**
+     * An object containing configuration options.
+     */
+    private options: {
+        /**
+         * A boolean value indicating whether to use modern color syntax for RGB and HSL.
+         */
+        modern?: boolean;
+    };
+
+    /**
+     * Initializes a new instance of the `Color` class.
+     *
+     * @param options - An optional object containing configuration options.
+     */
+    constructor(options?: { modern?: boolean }) {
+        this.options = options ?? {};
+    }
+
+    /**
      * Gets the RGBA color value.
      *
      * @returns {number[]} An array representing the RGBA color value.
@@ -401,24 +420,6 @@ class Color {
     }
 
     /**
-     * Converts an RGB(A) color string to an RGBA color and sets the `rgba` property.
-     *
-     * @param rgb - A string representing the RGB(A) color value (e.g., "rgb(255, 0, 0)" or "rgba(255, 0, 0, 0.5)").
-     * @returns getMethods - methods to convert the color to other formats.
-     * @throws {Error} If the RGB(A) format is invalid.
-     */
-    fromRGB(rgb: string) {
-        const numbers = rgb.match(/[\d.]+/g);
-        if (!numbers || numbers.length < 3) {
-            throw new Error("Invalid RGB(A) format");
-        }
-        const [r, g, b] = numbers.slice(0, 3).map((n) => parseFloat(n));
-        const a = numbers.length >= 4 ? parseFloat(numbers[3]) : 1;
-        this.rgba = [r, g, b, a];
-        return this.getMethods;
-    }
-
-    /**
      *  Converts a HEX color string to an RGBA color and sets the `rgba` property.
      *
      * @param hex - The HEX color string. It can be in the format of `#RGB`, `#RRGGBB`, or `#RRGGBBAA`.
@@ -458,6 +459,30 @@ class Color {
     }
 
     /**
+     * Converts an RGB(A) color string to an RGBA color and sets the `rgba` property.
+     *
+     * @param rgb - A string representing the RGB(A) color value (e.g., "rgb(255, 0, 0)" or "rgba(255, 0, 0, 0.5)").
+     * @returns getMethods - methods to convert the color to other formats.
+     * @throws {Error} If the RGB(A) format is invalid.
+     */
+    fromRGB(rgb: string) {
+        const numbers = rgb.match(/[\d.]+%?/g);
+        if (!numbers || numbers.length < 3) {
+            throw new Error("Invalid RGB(A) format");
+        }
+
+        const [r, g, b] = numbers.slice(0, 3).map((n) => parseFloat(n));
+        let a: number = numbers.length >= 4 ? parseFloat(numbers[3]) : 1;
+
+        if (numbers.length >= 4 && numbers[3].includes("%")) {
+            a = parseFloat(numbers[3]) / 100;
+        }
+
+        this.rgba = [r, g, b, a];
+        return this.getMethods;
+    }
+
+    /**
      * Converts an HSL(A) color string to an RGBA color and sets the `rgba` property.
      *
      * @param hsl - The HSL(A) color string to convert. The format should be `hsl(h, s%, l%)` or `hsl(h, s%, l%, a)`.
@@ -473,14 +498,22 @@ class Color {
         let alpha = 1;
         let parts: string[];
 
+        const parseAlpha = (alphaStr: string): number => {
+            alphaStr = alphaStr.trim().toLowerCase();
+            if (alphaStr === "none") return 1;
+            if (alphaStr.endsWith("%")) {
+                return parseFloat(alphaStr) / 100;
+            }
+            return parseFloat(alphaStr);
+        };
+
         if (partsBySlash.length === 2) {
-            alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
+            alpha = parseAlpha(partsBySlash[1]);
             parts = partsBySlash[0].split(/[\s,]+/);
         } else {
             parts = inner.split(/[\s,]+/);
             if (parts.length === 4) {
-                const alphaStr = parts.pop()!;
-                alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
+                alpha = parseAlpha(parts.pop()!);
             }
         }
 
@@ -489,7 +522,6 @@ class Color {
         }
 
         const hStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
-
         const hClean = hStr.replace(/deg$/i, "");
         const h = parseFloat(hClean) / 360;
 
@@ -547,6 +579,7 @@ class Color {
         const red = Math.round((r1 + m) * 255);
         const green = Math.round((g1 + m) * 255);
         const blue = Math.round((b1 + m) * 255);
+
         this.rgba = [red, green, blue, alpha];
         return this.getMethods;
     }
@@ -994,21 +1027,6 @@ class Color {
     }
 
     /**
-     * Converts the RGBA color values to a CSS RGB or RGBA string.
-     *
-     * @returns {string} A string representing the color in the format `rgb(r, g, b)` if the alpha value is 1,
-     *                   otherwise in the format `rgba(r, g, b, a)`.
-     */
-    private getRGB() {
-        const [r, g, b, a] = this.rgba;
-        if (a === 1) {
-            return `rgb(${r}, ${g}, ${b})`;
-        } else {
-            return `rgba(${r}, ${g}, ${b}, ${a})`;
-        }
-    }
-
-    /**
      * Converts the RGBA color value to a HEX color string.
      *
      * @returns {string} The HEX color string representation of the RGBA color.
@@ -1037,13 +1055,41 @@ class Color {
     }
 
     /**
+     * Converts the RGBA color values to a CSS RGB or RGBA string.
+     *
+     * @param modern - If `true`, returns the modern syntax (space separated with optional alpha percentage),
+     *                 otherwise returns the legacy syntax (comma separated).
+     * @returns {string} A string representing the color in the format `rgb(r, g, b)` if the alpha value is 1,
+     *                   otherwise in the format `rgba(r, g, b, a)`.
+     */
+    private getRGB(modern: boolean = false) {
+        const [r, g, b, a] = this.rgba;
+        if (modern || this.options?.modern) {
+            if (a === 1) {
+                return `rgb(${r} ${g} ${b})`;
+            } else {
+                const alphaPercentage = Math.round((a as number) * 100);
+                return `rgb(${r} ${g} ${b} / ${alphaPercentage}%)`;
+            }
+        } else {
+            if (a === 1) {
+                return `rgb(${r}, ${g}, ${b})`;
+            } else {
+                return `rgba(${r}, ${g}, ${b}, ${a})`;
+            }
+        }
+    }
+
+    /**
      * Converts the RGBA color value of the current instance to its HSL or HSLA representation.
      *
+     * @param modern - If `true`, returns the modern syntax (space separated with optional alpha percentage),
+     *                 otherwise returns the legacy syntax (comma separated).
      * @returns {string} The HSL or HSLA representation of the color.
      *                   If the alpha value is 1, the format will be `hsl(h, s%, l%)`.
      *                   Otherwise, the format will be `hsla(h, s%, l%, a)`.
      */
-    private getHSL() {
+    private getHSL(modern: boolean = false) {
         const [r, g, b, a] = this.rgba;
         const rNorm = r / 255;
         const gNorm = g / 255;
@@ -1071,10 +1117,19 @@ class Color {
         const s = Math.round(saturation * 100);
         const l = Math.round(lightness * 100);
 
-        if (a === 1) {
-            return `hsl(${h}, ${s}%, ${l}%)`;
+        if (modern || this.options?.modern) {
+            if (a === 1) {
+                return `hsl(${h} ${s}% ${l}%)`;
+            } else {
+                const alphaPercentage = Math.round((a as number) * 100);
+                return `hsl(${h} ${s}% ${l}% / ${alphaPercentage}%)`;
+            }
         } else {
-            return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+            if (a === 1) {
+                return `hsl(${h}, ${s}%, ${l}%)`;
+            } else {
+                return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+            }
         }
     }
 
