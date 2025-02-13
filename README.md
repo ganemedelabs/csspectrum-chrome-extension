@@ -48,17 +48,21 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
 CSSpectrum will soon support additional **CSS color models**, including:
 
 - [ ] **Relative CSS Colors**:
-- `hsl(from red 240deg s l)`
-- `hwb(from green h w b / 0.5)`
-- `lch(from blue calc(l + 20) c h)`
+  - `hsl(from red 240deg s l)`
+  - `hwb(from green h w b / 0.5)`
+  - `lch(from blue calc(l + 20) c h)`
 
 - [ ] **Gradients**:
-- `linear-gradient(to right, #ff5733, #ffcc00)`
-- `radial-gradient(circle, #ff5733, #ffcc00)`
+  - `linear-gradient(to right, #ff5733, #ffcc00)`
+  - `radial-gradient(circle, #ff5733, #ffcc00)`
 
 - [ ] **CSS Variables**:
-- `var(--my-color)`
-- `rgb(255, var(--green-value), 51)`
+  - `var(--my-color)`
+  - `rgb(255, var(--green-value), 51)`
+
+- [ ] **New CSS Color Functions**:
+  - `color(display-p3 1 0 0)`
+  - `color-mix(in srgb, red 50%, blue)`
 
 ## 🔧 Installation
 
