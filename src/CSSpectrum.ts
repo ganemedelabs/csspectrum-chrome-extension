@@ -1,3 +1,8 @@
+type Options = {
+    /** A boolean value indicating whether to use modern color syntax for RGB and HSL. */
+    modern?: boolean;
+};
+
 /**
  * A collection of CSS named colors and their corresponding RGBA values.
  * Each color is represented as an array of numbers where the first three
@@ -149,7 +154,7 @@ const cssColors: { [named: string]: [number, number, number, number?] } = {
 };
 
 /**
- * The `Color` class provides methods for parsing, converting, and manipulating colors in various formats.
+ * The `CSSpectrum` class provides methods for parsing, converting, and manipulating colors in various formats.
  * It supports a wide range of color formats including HEX, RGB(A), HSL(A), HWB, LAB, LCH, Oklab, Oklch, and named CSS colors.
  *
  * @remarks
@@ -158,18 +163,12 @@ const cssColors: { [named: string]: [number, number, number, number?] } = {
  *
  * @example
  * ```typescript
- * const color = new Color();
+ * const color = new CSSpectrum();
  * color.fromHEX("#FF5733");
  * console.log(color.getRGB()); // Outputs: "rgb(255, 87, 51)"
  * ```
- *
- * Steps to add a new color format:
- * 1. Add a new pattern to the `Color.patterns` object.
- * 2. Add a `fromFormat` method that returns `this.getMethods`.
- * 3. Add a private `getFormat` method that returns the string of the new format.
- * 4. Add the private `getFormat` method to the `getMethods` object.
  */
-class Color {
+class CSSpectrum {
     /**
      * Represents the RGBA color value.
      */
@@ -183,19 +182,14 @@ class Color {
     /**
      * An object containing configuration options.
      */
-    private options: {
-        /**
-         * A boolean value indicating whether to use modern color syntax for RGB and HSL.
-         */
-        modern?: boolean;
-    };
+    private options: Options = {};
 
     /**
      * Initializes a new instance of the `Color` class.
      *
      * @param options - An optional object containing configuration options.
      */
-    constructor(options?: { modern?: boolean }) {
+    constructor(options?: Options) {
         this.options = options ?? {};
     }
 
@@ -232,6 +226,12 @@ class Color {
 
         this._rgba = newValue;
     }
+
+    /**
+     * ############################
+     * ##### Static Variables #####
+     * ############################
+     */
 
     /**
      * A collection of regular expression patterns for matching various color formats.
@@ -306,7 +306,7 @@ class Color {
     /**
      * An object containing bound methods for getting colors from `fromFormat` methods.
      */
-    private getMethods = {
+    private chainingMethods = {
         getNextColor: this.getNextColor.bind(this),
         getNamed: this.getNamed.bind(this),
         getRGB: this.getRGB.bind(this),
@@ -317,7 +317,34 @@ class Color {
         getLCH: this.getLCH.bind(this),
         getOklab: this.getOklab.bind(this),
         getOklch: this.getOklch.bind(this),
+
+        ...{
+            lighten: this.lighten.bind(this),
+            darken: this.darken.bind(this),
+            saturate: this.saturate.bind(this),
+            desaturate: this.desaturate.bind(this),
+            rotate: this.rotate.bind(this),
+            invert: this.invert.bind(this),
+            alpha: this.alpha.bind(this),
+            red: this.red.bind(this),
+            green: this.green.bind(this),
+            blue: this.blue.bind(this),
+        },
+
+        ...{
+            isValid: this.isValid.bind(this),
+            mixWith: this.mixWith.bind(this),
+            orFallback: this.orFallback.bind(this),
+            clone: this.clone.bind(this),
+            equals: this.equals.bind(this),
+        },
     };
+
+    /**
+     * ##########################
+     * ##### Static Methods #####
+     * ##########################
+     */
 
     /**
      * Determines the type of a given color string based on predefined colors.
@@ -327,12 +354,86 @@ class Color {
      * @throws {Error} If the color format is invalid.
      */
     static type(color: string) {
-        for (const [key, pattern] of Object.entries(Color.patterns)) {
+        for (const [key, pattern] of Object.entries(CSSpectrum.patterns)) {
             if (pattern.test(color)) {
                 return key;
             }
         }
         throw new Error("Invalid color format");
+    }
+
+    /**
+     * Calculates the relative luminance of a given color.
+     *
+     * The luminance is calculated based on the RGB values of the color.
+     * The formula used is derived from the WCAG definition of relative luminance.
+     *
+     * @param color - The color in any format that can be parsed by `CSSpectrum`.
+     * @returns The relative luminance of the color as a number between 0 and 1, or `null` if the color format is invalid.
+     */
+    static luminance(color: string) {
+        const rgb = new CSSpectrum().fromUnknown(color).getRGB();
+        const match = rgb.match(CSSpectrum.patterns.RGB);
+        if (!match) {
+            console.error("Invalid color format:", color);
+            return null;
+        }
+
+        const [r, g, b] = match.slice(1, 4).map((n) => {
+            const num = parseFloat(n);
+            return n.includes("%") ? (num / 100) * 255 : num;
+        });
+
+        const transform = (channel: number) => {
+            const c = channel / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        };
+
+        return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b);
+    }
+
+    /**
+     * Calculates the contrast ratio between two colors.
+     *
+     * The contrast ratio is calculated using the luminance of the two colors.
+     * The formula used is (L1 + 0.05) / (L2 + 0.05), where L1 is the higher luminance
+     * and L2 is the lower luminance.
+     *
+     * @param color1 - The first color in hexadecimal format.
+     * @param color2 - The second color in hexadecimal format.
+     * @returns The contrast ratio between the two colors.
+     */
+    static contrastRatio(color1: string, color2: string) {
+        const l1 = CSSpectrum.luminance(color1) as number;
+        const l2 = CSSpectrum.luminance(color2) as number;
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+
+    /**
+     * Determines if a pair of colors meets the WCAG contrast ratio requirements.
+     *
+     * This method calculates the contrast ratio between two colors and checks if it meets
+     * the specified WCAG level ("AA" or "AAA"). It also validates input colors.
+     *
+     * @param {string} color1 - The first color in hexadecimal format (e.g., "#FFFFFF").
+     * @param {string} color2 - The second color in hexadecimal format (e.g., "#000000").
+     * @param {string} [level="AA"] - The WCAG level to check against. Accepts "AA" or "AAA".
+     * @returns {boolean} `true` if the contrast ratio meets the specified level, `false` otherwise.
+     * @throws {Error} Throws an error if an invalid color format or WCAG level is provided.
+     */
+    static isAccessiblePair(color1: string, color2: string, level: "AA" | "AAA" = "AA") {
+        const contrast = CSSpectrum.contrastRatio(color1, color2);
+
+        const levels = {
+            AA: 4.5,
+            AAA: 7.0,
+        };
+
+        if (!(level in levels)) {
+            throw new Error("Invalid WCAG level. Use 'AA' or 'AAA'.");
+        }
+
+        return contrast >= levels[level];
     }
 
     /**
@@ -357,7 +458,7 @@ class Color {
             };
         };
 
-        const fg = parseColor(new Color().fromUnknown(color).getRGB());
+        const fg = parseColor(new CSSpectrum().fromUnknown(color).getRGB());
         const bg = parseColor(backgroundColor);
         if (!fg || !bg) {
             return false;
@@ -367,17 +468,27 @@ class Color {
         const compositeG = fg.g * fg.a + bg.g * (1 - fg.a);
         const compositeB = fg.b * fg.a + bg.b * (1 - fg.a);
 
-        const getLuminance = (r: number, g: number, b: number) => {
-            const transform = (channel: number) => {
-                const c = channel / 255;
-                return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-            };
-            return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b);
-        };
-
-        const luminance = getLuminance(compositeR, compositeG, compositeB);
+        const luminance = this.luminance(`rgb(${compositeR}, ${compositeG}, ${compositeB})`) as number;
         return luminance < 0.5;
     }
+
+    static random(type: keyof typeof CSSpectrum.patterns) {
+        const randomChannel = () => Math.floor(Math.random() * 200 + 30);
+
+        const randomColor = new CSSpectrum().fromRGB(
+            `rgb(${randomChannel()}, ${randomChannel()}, ${randomChannel()}})`
+        );
+
+        const methodName = `get${type[0].toUpperCase() + type.slice(1)}` as keyof typeof randomColor;
+        // @ts-expect-error
+        return randomColor[methodName]();
+    }
+
+    /**
+     * ###################################
+     * ##### Public Instance Methods #####
+     * ###################################
+     */
 
     /**
      * Converts a color string of unknown format to a specific color format using the appropriate method.
@@ -389,9 +500,9 @@ class Color {
      * @returns The result of the conversion method corresponding to the detected color format.
      * @throws {Error} If the color format is unsupported.
      */
-    fromUnknown(color: string): typeof this.getMethods {
-        const type = Color.type(color);
-        const fromMethod = `from${type[0].toUpperCase() + type.slice(1)}` as keyof Color;
+    fromUnknown(color: string): typeof this.chainingMethods {
+        const type = CSSpectrum.type(color);
+        const fromMethod = `from${type[0].toUpperCase() + type.slice(1)}` as keyof CSSpectrum;
 
         if (typeof this[fromMethod] !== "function") {
             throw new Error(`Unsupported color format: ${type}`);
@@ -404,7 +515,7 @@ class Color {
      * Converts a named CSS color string to an RGBA color and sets the `rgba` property.
      *
      * @param named - The named CSS color to convert (e.g., "red", "blue", "dark slate gray").
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the named color is invalid.
      */
     fromNamed(named: string) {
@@ -416,14 +527,14 @@ class Color {
         }
 
         this.rgba = [rgb[0], rgb[1], rgb[2], rgb[3] ?? 1];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      *  Converts a HEX color string to an RGBA color and sets the `rgba` property.
      *
      * @param hex - The HEX color string. It can be in the format of `#RGB`, `#RRGGBB`, or `#RRGGBBAA`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the HEX color format is invalid.
      */
     fromHEX(hex: string) {
@@ -455,14 +566,14 @@ class Color {
         }
 
         this.rgba = [r, g, b, a];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an RGB(A) color string to an RGBA color and sets the `rgba` property.
      *
      * @param rgb - A string representing the RGB(A) color value (e.g., "rgb(255, 0, 0)" or "rgba(255, 0, 0, 0.5)").
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the RGB(A) format is invalid.
      */
     fromRGB(rgb: string) {
@@ -479,14 +590,14 @@ class Color {
         }
 
         this.rgba = [r, g, b, a];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an HSL(A) color string to an RGBA color and sets the `rgba` property.
      *
      * @param hsl - The HSL(A) color string to convert. The format should be `hsl(h, s%, l%)` or `hsl(h, s%, l%, a)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the HSL(A) format is invalid.
      */
     fromHSL(hsl: string) {
@@ -581,14 +692,14 @@ class Color {
         const blue = Math.round((b1 + m) * 255);
 
         this.rgba = [red, green, blue, alpha];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts a HWB(A) color string to an RGBA color and sets the `rgba` property.
      *
      * @param hwb - The HWB(A) color string to convert. The format should be `hwb(h, w%, b%)` or `hwb(h, w%, b%, a)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the HWB(A) format is invalid.
      */
     fromHWB(hwb: string) {
@@ -633,7 +744,7 @@ class Color {
             const gray = w / (w + bl);
             const c = Math.round(gray * 255);
             this.rgba = [c, c, c, alpha];
-            return this.getMethods;
+            return this.chainingMethods;
         }
 
         let hue = h % 360;
@@ -674,14 +785,14 @@ class Color {
         const green = Math.round((g1 * (1 - w - bl) + w) * 255);
         const blue = Math.round((b1 * (1 - w - bl) + w) * 255);
         this.rgba = [red, green, blue, alpha];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an LAB color string to an RGBA color and sets the `rgba` property.
      *
      * @param lab - The LAB color string to convert. The format should be `lab(L, a, b / alpha)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the LAB format is invalid.
      */
     fromLAB(lab: string) {
@@ -744,14 +855,14 @@ class Color {
         bVal = Math.min(Math.max(bVal, 0), 1);
 
         this.rgba = [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an LCH color string to an RGBA color and sets the `rgba` property.
      *
      * @param lch - The LCH color string to convert. The format should be `lch(L, C, h / alpha)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the LCH format is invalid.
      */
     fromLCH(lch: string) {
@@ -817,14 +928,14 @@ class Color {
         bVal = Math.min(Math.max(bVal, 0), 1);
 
         this.rgba = [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an Oklab color string to an RGBA color and sets the `rgba` property.
      *
      * @param oklab - The Oklab color string to convert. The format should be `oklab(L, a, b / alpha)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the Oklab format is invalid.
      */
     fromOklab(oklab: string) {
@@ -886,14 +997,14 @@ class Color {
         bVal = Math.min(Math.max(bVal, 0), 1);
 
         this.rgba = [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
-        return this.getMethods;
+        return this.chainingMethods;
     }
 
     /**
      * Converts an Oklch color string to an RGBA color and sets the `rgba` property.
      *
      * @param oklch - The Oklch color string to convert. The format should be `oklch(L, C, h / alpha)`.
-     * @returns getMethods - methods to convert the color to other formats.
+     * @returns The current instance methods for chaining.
      * @throws {Error} If the Oklch format is invalid.
      */
     fromOklch(oklch: string) {
@@ -956,7 +1067,235 @@ class Color {
         bVal = Math.min(Math.max(bVal, 0), 1);
 
         this.rgba = [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
-        return this.getMethods;
+        return this.chainingMethods;
+    }
+
+    /**
+     * ####################################
+     * ##### Private Instance Methods #####
+     * ####################################
+     */
+
+    /**
+     * Lightens the current color by a specified amount.
+     *
+     * @param amount - A number between 0 and 1 representing the amount to lighten the color.
+     *                 0 means no change, and 1 means fully white.
+     * @returns The current instance's methods for chaining.
+     */
+    private lighten(amount: number) {
+        if (amount > 1) amount = 1;
+        if (amount < 0) amount = 0;
+
+        const [r, g, b, a] = this.rgba;
+        this.rgba = [r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount, a];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Darkens the current RGBA color by the specified amount.
+     *
+     * @param amount - A number between 0 and 1 representing the amount to darken the color.
+     *                 0 means no change, and 1 means fully black.
+     * @returns The current instance methods for chaining.
+     */
+    private darken(amount: number) {
+        if (amount > 1) amount = 1;
+        if (amount < 0) amount = 0;
+
+        const [r, g, b, a] = this.rgba;
+        this.rgba = [r - r * amount, g - g * amount, b - b * amount, a];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Adjusts the saturation of the current RGBA color.
+     *
+     * @param amount - A number between 0 and 1 representing the amount to saturate the color.
+     *                 0 means no change, and 1 means fully saturated.
+     * @returns The current instance methods for chaining.
+     */
+    private saturate(amount: number) {
+        if (amount > 1) amount = 1;
+        if (amount < 0) amount = 0;
+
+        const [r, g, b, a] = this.rgba;
+        this.rgba = [
+            r + (r - Math.max(r, g, b)) * amount,
+            g + (g - Math.max(r, g, b)) * amount,
+            b + (b - Math.max(r, g, b)) * amount,
+            a,
+        ];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Desaturates the current RGBA color by the specified amount.
+     *
+     * @param amount - A number between 0 and 1 representing the amount to desaturate the color.
+     *                 0 means no change, and 1 means fully desaturated.
+     * @returns The current instance methods for chaining.
+     */
+    private desaturate(amount: number) {
+        if (amount > 1) amount = 1;
+        if (amount < 0) amount = 0;
+
+        const [r, g, b, a] = this.rgba;
+        this.rgba = [
+            r - (r - Math.min(r, g, b)) * amount,
+            g - (g - Math.min(r, g, b)) * amount,
+            b - (b - Math.min(r, g, b)) * amount,
+            a,
+        ];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Increments or decrements the hue value of the color.
+     *
+     * @param amount - The amount to increment or decrement the hue value.
+     * @returns The current instance methods for chaining.
+     */
+    private rotate(amount: number) {
+        const [h, s, l, a = 1] = this.getHSL().match(/\d+/g)!.map(Number);
+        this.fromHSL(`hsl(${(Number(h) + amount + 360) % 360}, ${s}%, ${l}%, ${a})`);
+        return this.chainingMethods;
+    }
+
+    /**
+     * Inverts the color by subtracting each RGB component from 255.
+     *
+     * @param amount - The amount to increment or decrement the hue value.
+     * @returns The current instance methods for chaining.
+     */
+    private invert() {
+        const [r, g, b, a] = this.rgba;
+        this.rgba = [255 - r, 255 - g, 255 - b, a];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Sets the alpha component of the RGBA color.
+     *
+     * @param amount - The value to set for the alpha component (0-1).
+     * @returns The current instance methods for chaining.
+     */
+    private alpha(amount: number) {
+        this.rgba = [this.rgba[0], this.rgba[1], this.rgba[2], amount];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Sets the red component of the RGBA color.
+     *
+     * @param amount - The value to set for the red component (0-255).
+     * @returns The current instance methods for chaining.
+     */
+    private red(amount: number) {
+        this.rgba = [amount, this.rgba[1], this.rgba[2], this.rgba[3]];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Sets the red component of the RGBA color.
+     *
+     * @param amount - The value to set for the red component (0-255).
+     * @returns The current instance methods for chaining.
+     */
+    private green(amount: number) {
+        this.rgba = [this.rgba[0], amount, this.rgba[2], this.rgba[3]];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Sets the blue component of the RGBA color.
+     *
+     * @param amount - The value to set for the blue component (0-255).
+     * @returns The current instance methods for chaining.
+     */
+    private blue(amount: number) {
+        this.rgba = [this.rgba[0], this.rgba[1], amount, this.rgba[3]];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Checks if the given value matches the pattern for the specified type.
+     *
+     * @param type - The type of pattern to validate against. This should be a key of the `CSSpectrum.patterns` object.
+     * @param value - The string value to be tested against the pattern.
+     * @returns `true` if the value matches the pattern for the specified type, otherwise `false`.
+     */
+    private isValid(type: keyof typeof CSSpectrum.patterns, value: string) {
+        return CSSpectrum.patterns[type].test(value);
+    }
+
+    /**
+     * Mixes the current color with another color by a specified amount.
+     *
+     * @param color - The color to mix with, in a string format.
+     * @param amount - The amount to mix the other color, ranging from 0 to 1.
+     *                  0 means no change, 1 means fully the other color.
+     * @returns The current instance to allow for method chaining.
+     * @throws Will throw an error if the provided color is not in a valid RGB format.
+     */
+    private mixWith(color: string, amount: number) {
+        const other = new CSSpectrum().fromUnknown(color);
+        const [r1, g1, b1, a1] = this.rgba;
+        const match = other.getRGB().match(/\d+/g);
+        if (!match) {
+            throw new Error("Invalid RGB format");
+        }
+        const [r2, g2, b2, a2] = match.map(Number);
+
+        this.rgba = [
+            r1 + (r2 - r1) * amount,
+            g1 + (g2 - g1) * amount,
+            b1 + (b2 - b1) * amount,
+            (a1 ?? 1) + ((a2 ?? 1) - (a1 ?? 1)) * amount,
+        ];
+        return this.chainingMethods;
+    }
+
+    /**
+     * Checks if the given color is valid according to the CSSpectrum patterns.
+     * If the color is not valid, it attempts to convert the color from a named color.
+     *
+     * @param color - The color string to validate and potentially convert.
+     * @returns An object containing chaining methods for further operations.
+     */
+    private orFallback(color: string) {
+        if (!this.isValid(CSSpectrum.type(color) as keyof typeof CSSpectrum.patterns, color)) {
+            this.fromNamed(color);
+        }
+        return this.chainingMethods;
+    }
+
+    /**
+     * Creates a clone of the current CSSpectrum instance.
+     *
+     * @returns {CSSpectrum} A new instance of CSSpectrum with the same options and rgba values as the current instance.
+     *
+     * @example
+     * ```typescript
+     * const color = new CSSpectrum().fromHEX("#FF5733");
+     * const clone = color.clone();
+     * console.log(clone.getRGB()); // Outputs: "rgb(255, 87, 51)"
+     * ```
+     */
+    private clone() {
+        const clone = new CSSpectrum(this.options);
+        clone.rgba = this.rgba;
+        return clone.chainingMethods;
+    }
+
+    /**
+     * Compares the current color with another color.
+     *
+     * @param color - The color to compare with the current color.
+     * @returns A boolean indicating whether the two colors are equal.
+     */
+    private equals(color: string) {
+        return this.getRGB() === new CSSpectrum().fromUnknown(color).getRGB();
     }
 
     /**
@@ -973,11 +1312,13 @@ class Color {
             throw new Error("Invalid index input.");
         }
 
-        if (currentIndex < 0 || currentIndex >= Object.keys(Color.patterns).length) {
+        const patterns = CSSpectrum.patterns;
+
+        if (currentIndex < 0 || currentIndex >= Object.keys(patterns).length) {
             currentIndex = 0;
         }
 
-        let formats = Object.keys(Color.patterns);
+        let formats = Object.keys(patterns);
 
         if (!this.name) {
             formats = formats.filter((format) => format !== "named");
@@ -993,7 +1334,7 @@ class Color {
             nextIndex = newIndex.toString();
         } else {
             const filteredGetMethods = Object.fromEntries(
-                Object.entries(this.getMethods)
+                Object.entries(this.chainingMethods)
                     .filter(([key]) => key !== "getNextColor")
                     .map(([key, value]) => [key, value as () => string])
             );
@@ -1377,4 +1718,4 @@ class Color {
     }
 }
 
-export default Color;
+export default CSSpectrum;

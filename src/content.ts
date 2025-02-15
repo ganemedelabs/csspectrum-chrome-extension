@@ -1,4 +1,4 @@
-import Color from "./Color";
+import CSSpectrum from "./CSSpectrum";
 
 /**
  * Processes a text node to find and highlight color patterns within the text.
@@ -22,7 +22,7 @@ function processTextNode(textNode: Text, modern = false) {
     if (!text) return;
 
     const matches = [];
-    const colorPatterns = Color.patterns;
+    const colorPatterns = CSSpectrum.patterns;
 
     for (const [key, pattern] of Object.entries(colorPatterns)) {
         const flags = pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g";
@@ -55,12 +55,12 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = new Color().fromUnknown(colorString).getRGB(false);
+        const bgColor = new CSSpectrum().fromUnknown(colorString).getRGB(false);
         const isNamedColor = colorPatterns.named.test(matchText);
         const pageBgColor = window.getComputedStyle(document.body).backgroundColor;
 
         wrapper.style.background = bgColor;
-        wrapper.style.color = Color.isDark(bgColor, pageBgColor) ? "#fff" : "#000";
+        wrapper.style.color = CSSpectrum.isDark(bgColor, pageBgColor) ? "#fff" : "#000";
         wrapper.style.border = `2px solid ${bgColor.startsWith("rgba") ? bgColor.replace(/[^,]+(?=\))/, "1") : bgColor}`;
         wrapper.style.borderRadius = "3px";
         wrapper.style.padding = "0 3px";
@@ -79,7 +79,7 @@ function processTextNode(textNode: Text, modern = false) {
             }
 
             let nextColor, nextIndex;
-            const colorClass = new Color({ modern });
+            const colorClass = new CSSpectrum({ modern });
 
             const originalNamedColor = wrapper.getAttribute("data-csspectrum-name") || undefined;
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
