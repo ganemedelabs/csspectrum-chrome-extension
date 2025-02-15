@@ -9,7 +9,7 @@ type Options = {
  * numbers are the red, green, and blue components, and the optional fourth
  * number is the alpha component.
  */
-const cssColors: { [named: string]: [number, number, number, number?] } = {
+const namedColors: { [named: string]: [number, number, number, number?] } = {
     cornsilk: [255, 248, 220],
     blanchedalmond: [255, 235, 205],
     bisque: [255, 228, 196],
@@ -28,13 +28,20 @@ const cssColors: { [named: string]: [number, number, number, number?] } = {
     maroon: [128, 0, 0],
     gainsboro: [220, 220, 220],
     lightgray: [211, 211, 211],
+    lightgrey: [211, 211, 211],
     silver: [192, 192, 192],
     darkgray: [169, 169, 169],
+    darkgrey: [169, 169, 169],
     gray: [128, 128, 128],
+    grey: [128, 128, 128],
     dimgray: [105, 105, 105],
+    dimgrey: [105, 105, 105],
     lightslategray: [119, 136, 153],
+    lightslategrey: [119, 136, 153],
     slategray: [112, 128, 144],
+    slategrey: [112, 128, 144],
     darkslategray: [47, 79, 79],
+    darkslategrey: [47, 79, 79],
     black: [0, 0, 0],
     white: [255, 255, 255],
     snow: [255, 250, 250],
@@ -216,7 +223,7 @@ class CSSpectrum {
         const [r, g, b, a = 1] = newValue;
 
         if (a === 1) {
-            for (const [name, rgb] of Object.entries(cssColors)) {
+            for (const [name, rgb] of Object.entries(namedColors)) {
                 if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
                     this.name = name;
                     break;
@@ -236,7 +243,7 @@ class CSSpectrum {
     /**
      * A collection of regular expression patterns for matching various color formats.
      *
-     * @property {RegExp} HEX - Matches hexadecimal color codes, including 3, 6, and 8 digit formats.
+     * @property {RegExp} HEX - Matches hexadecimal color codes, including 3, 4, 6, and 8 digit formats.
      * @property {RegExp} RGB - Matches RGB and RGBA color formats.
      * @property {RegExp} HSL - Matches HSL and HSLA color formats.
      * @property {RegExp} HWB - Matches HWB color format.
@@ -246,62 +253,224 @@ class CSSpectrum {
      * @property {RegExp} Oklch - Matches Oklch color format.
      * @property {RegExp} named - Matches named CSS colors.
      */
-    static patterns = {
-        /**
-         * Matches hexadecimal color codes, including 3, 6, and 8 digit formats.
-         * @example
-         * "#FFF", "#FFFFFF", "#FF0000", "#FF0000FF" // case-insensitive
-         */
-        HEX: /#([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})\b/,
-        /**
-         * Matches RGB and RGBA color formats.
-         * @example
-         * "rgb(255, 0, 0)", "rgba(255, 0, 0, 0.5)", "rgb(255 0 0 / 0.5)"
-         */
-        RGB: /rgba?\(\s*(\d{1,3}%?)\s*(?:,\s*|\s+)(\d{1,3}%?)\s*(?:,\s*|\s+)(\d{1,3}%?)(?:\s*(?:,\s*|\s+|\/\s*)(\d{1,3}%?|0?\.\d+))?\s*\)/i,
-        /**
-         * Matches HSL and HSLA color formats.
-         * @example
-         * "hsl(0, 100%, 50%)", "hsla(0, 100%, 50%, 0.5)", "hsl(0 100% 50% / 0.5)"
-         */
-        HSL: /hsla?\(\s*((?:\d{1,3}(?:deg)?|none))\s*(?:,\s*|\s+)((?:\d{1,3}%?|none))\s*(?:,\s*|\s+)((?:\d{1,3}%?|none))(?:\s*(?:,\s*|\s+|\/\s*)((?:\d{1,3}%?|0?\.\d+|none)))?\s*\)/i,
-        /**
-         * Matches HWB color format.
-         * @example
-         * "hwb(0, 0%, 0%)", "hwb(0, 0%, 0%, 0.5)", "hwb(0, 0%, 0% / 0.5)"
-         */
-        HWB: /hwb\(\s*((?:\d{1,3}|none))\s*(?:,\s*|\s+)((?:\d{1,3}%?|none))\s*(?:,\s*|\s+)((?:\d{1,3}%?|none))\s*(?:,\s*|\s+|\/\s*)?((?:0?\.\d+|\d{1,3}%?|none))?\s*\)/i,
-        /**
-         * Matches LAB color format.
-         * @example
-         * "lab(100%, 0, 0)", "lab(100%, 0, 0, 0.5)", "lab(100%, 0, 0 / 0.5)"
-         */
-        LAB: /lab\(\s*((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+|\/\s*)?((?:\d+(?:\.\d+)?%?|0?\.\d+|none))?\s*\)/i,
-        /**
-         * Matches LCH color format.
-         * @example
-         * "lch(100%, 0, 0)", "lch(100%, 0, 0, 0.5)", "lch(100%, 0, 0 / 0.5)"
-         */
-        LCH: /lch\(\s*((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:\d+(?:\.\d+)?|none))\s*(?:,\s*|\s+)((?:-?\d+(?:\.\d+)?(?:deg)?|none))\s*(?:,\s*|\s+|\/\s*)?((?:\d+(?:\.\d+)?%?|0?\.\d+|none))?\s*\)/i,
-        /**
-         * Matches Oklab color format.
-         * @example
-         * "oklab(100%, 0, 0)", "oklab(100%, 0, 0, 0.5)", "oklab(100%, 0, 0 / 0.5)"
-         */
-        Oklab: /oklab\(\s*((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:-?\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:-?\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+|\/\s*)?((?:\d+(?:\.\d+)?%?|0?\.\d+|none))?\s*\)/i,
-        /**
-         * Matches Oklch color format.
-         * @example
-         * "oklch(100%, 0, 0)", "oklch(100%, 0, 0, 0.5)", "oklch(100%, 0, 0 / 0.5)"
-         */
-        Oklch: /oklch\(\s*((?:\d+(?:\.\d+)?%?|none))\s*(?:,\s*|\s+)((?:\d+(?:\.\d+)?|none))\s*(?:,\s*|\s+)((?:-?\d+(?:\.\d+)?(?:deg)?|none))\s*(?:,\s*|\s+|\/\s*)?((?:\d+(?:\.\d+)?%?|0?\.\d+|none))?\s*\)/i,
-        /**
-         * Matches named CSS colors.
-         * @example
-         * "blue", "orangered", "dark-slate-gray", "light golden rod yellow" // case-insensitive
-         */
-        named: /\b(light(?:\s*|-)?golden(?:\s*|-)?rod(?:\s*|-)?yellow|corn(?:\s*|-)?flower(?:\s*|-)?blue|dark(?:\s*|-)?golden(?:\s*|-)?rod|dark(?:\s*|-)?olive(?:\s*|-)?green|dark(?:\s*|-)?sea(?:\s*|-)?green|medium(?:\s*|-)?sea(?:\s*|-)?green|dark(?:\s*|-)?slate(?:\s*|-)?gray|dark(?:\s*|-)?slate(?:\s*|-)?grey|light(?:\s*|-)?slate(?:\s*|-)?gray|light(?:\s*|-)?slate(?:\s*|-)?grey|light(?:\s*|-)?steel(?:\s*|-)?blue|medium(?:\s*|-)?aqua(?:\s*|-)?marine|medium(?:\s*|-)?spring(?:\s*|-)?green|medium(?:\s*|-)?slate(?:\s*|-)?blue|medium(?:\s*|-)?violet(?:\s*|-)?red|pale(?:\s*|-)?golden(?:\s*|-)?rod|pale(?:\s*|-)?violet(?:\s*|-)?red|light(?:\s*|-)?sky(?:\s*|-)?blue|deep(?:\s*|-)?sky(?:\s*|-)?blue|blue(?:\s*|-)?violet|dark(?:\s*|-)?slate(?:\s*|-)?blue|dodger(?:\s*|-)?blue|fire(?:\s*|-)?brick|floral(?:\s*|-)?white|forest(?:\s*|-)?green|ghost(?:\s*|-)?white|golden(?:\s*|-)?rod|green(?:\s*|-)?yellow|hot(?:\s*|-)?pink|indian(?:\s*|-)?red|lavender(?:\s*|-)?blush|lemon(?:\s*|-)?chiffon|light(?:\s*|-)?golden(?:\s*|-)?rod(?:\s*|-)?yellow|light(?:\s*|-)?sea(?:\s*|-)?green|light(?:\s*|-)?green|light(?:\s*|-)?yellow|light(?:\s*|-)?salmon|light(?:\s*|-)?pink|light(?:\s*|-)?blue|light(?:\s*|-)?cyan|light(?:\s*|-)?coral|dark(?:\s*|-)?khaki|dark(?:\s*|-)?orange|dark(?:\s*|-)?orchid|dark(?:\s*|-)?red|dark(?:\s*|-)?salmon|dark(?:\s*|-)?turquoise|dark(?:\s*|-)?violet|dim(?:\s*|-)?gray|dim(?:\s*|-)?grey|medium(?:\s*|-)?orchid|medium(?:\s*|-)?purple|medium(?:\s*|-)?blue|mint(?:\s*|-)?cream|misty(?:\s*|-)?rose|navajo(?:\s*|-)?white|orange(?:\s*|-)?red|papaya(?:\s*|-)?whip|peach(?:\s*|-)?puff|powder(?:\s*|-)?blue|rebecca(?:\s*|-)?purple|rosy(?:\s*|-)?brown|royal(?:\s*|-)?blue|saddle(?:\s*|-)?brown|sandy(?:\s*|-)?brown|sea(?:\s*|-)?green|sea(?:\s*|-)?shell|spring(?:\s*|-)?green|steel(?:\s*|-)?blue|white(?:\s*|-)?smoke|yellow(?:\s*|-)?green|alice(?:\s*|-)?blue|aqua(?:\s*|-)?marine|antique(?:\s*|-)?white|blanched(?:\s*|-)?almond|dark(?:\s*|-)?magenta|burly(?:\s*|-)?wood|cadet(?:\s*|-)?blue|chartreuse|corn(?:\s*|-)?silk|dark(?:\s*|-)?blue|dark(?:\s*|-)?cyan|dark(?:\s*|-)?gray|dark(?:\s*|-)?grey|light(?:\s*|-)?gray|light(?:\s*|-)?grey|dark(?:\s*|-)?green|deep(?:\s*|-)?pink|gainsboro|honeydew|indigo|lawn(?:\s*|-)?green|lime(?:\s*|-)?green|medium(?:\s*|-)?turquoise|midnight(?:\s*|-)?blue|old(?:\s*|-)?lace|olive(?:\s*|-)?drab|pale(?:\s*|-)?green|pale(?:\s*|-)?turquoise|sky(?:\s*|-)?blue|slate(?:\s*|-)?blue|slate(?:\s*|-)?gray|slate(?:\s*|-)?grey|azure|beige|bisque|black|blue|brown|chocolate|coral|crimson|cyan|fuchsia|gray|green|grey|ivory|khaki|lavender|linen|magenta|maroon|moccasin|navy|olive|orange|orchid|peru|pink|plum|purple|red|salmon|sienna|silver|snow|tan|teal|thistle|tomato|turquoise|violet|wheat|white|yellow|gold|lime|aqua|transparent)\b/i,
-    };
+    static patterns = (() => {
+        const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
+        const rgbNum = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|\\d{1,2})(?:\\.\\d+)?";
+        const rgbComponent = `(?:${rgbNum}|${percentage})`;
+        const hue = "[-+]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:deg)?";
+        const alphaNum = "(?:0|1|0?\\.\\d+)";
+        const alpha = `(?:(?:${alphaNum})|(?:${percentage}))`;
+        const labComponent = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+        const perc = percentage;
+        const lchChroma = "(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+
+        return {
+            /**
+             * Matches hexadecimal color codes, including 3, 4, 6, and 8 digit formats.
+             *
+             * @example
+             * "#FFF", "#FFFFFF", "#FF0000", "#FF0000FF" // case-insensitive
+             */
+            HEX: /#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b/,
+
+            /**
+             * Matches RGB and RGBA color formats.
+             *
+             * @example
+             * "rgb(255, 0, 0)", "rgba(255, 0, 0, 0.5)", "rgb(255 0 0 / 0.5)"
+             */
+            RGB: new RegExp(
+                "rgba?\\(\\s*" +
+                    "(" +
+                    rgbComponent +
+                    ")" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    rgbComponent +
+                    ")" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    rgbComponent +
+                    ")" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches HSL and HSLA color formats.
+             *
+             * @example
+             * "hsl(0, 100%, 50%)", "hsla(0, 100%, 50%, 0.5)", "hsl(0 100% 50% / 0.5)"
+             */
+            HSL: new RegExp(
+                "hsla?\\(\\s*" +
+                    "(" +
+                    hue +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches HWB color format.
+             *
+             * @example
+             * "hwb(0, 0%, 0%)", "hwb(0, 0%, 0%, 0.5)", "hwb(0, 0%, 0% / 0.5)"
+             */
+            HWB: new RegExp(
+                "hwb\\(\\s*" +
+                    "(" +
+                    hue +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches LAB color format.
+             *
+             * @example
+             * "lab(100%, 0, 0)", "lab(100%, 0, 0, 0.5)", "lab(100%, 0, 0 / 0.5)"
+             */
+            LAB: new RegExp(
+                "lab\\(\\s*" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    labComponent +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    labComponent +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches LCH color format.
+             *
+             * @example
+             * "lch(100%, 0, 0)", "lch(100%, 0, 0, 0.5)", "lch(100%, 0, 0 / 0.5)"
+             */
+            LCH: new RegExp(
+                "lch\\(\\s*" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    lchChroma +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    hue +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches Oklab color format.
+             *
+             * @example
+             * "oklab(100%, 0, 0)", "oklab(100%, 0, 0, 0.5)", "oklab(100%, 0, 0 / 0.5)"
+             */
+            Oklab: new RegExp(
+                "oklab\\(\\s*" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    labComponent +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    labComponent +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches Oklch color format.
+             *
+             * @example
+             * "oklch(100%, 0, 0)", "oklch(100%, 0, 0, 0.5)", "oklch(100%, 0, 0 / 0.5)"
+             */
+            Oklch: new RegExp(
+                "oklch\\(\\s*" +
+                    "(" +
+                    perc +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    lchChroma +
+                    "|none)" +
+                    "\\s*(?:,\\s*|\\s+)" +
+                    "(" +
+                    hue +
+                    "|none)" +
+                    "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
+                    "(" +
+                    alpha +
+                    ")" +
+                    ")?\\s*\\)",
+                "i"
+            ),
+
+            /**
+             * Matches named CSS colors.
+             *
+             * @example
+             * "blue", "orangered", "darkslategray" // case-insensitive
+             */
+            named: new RegExp(`\\b(${Object.keys(namedColors).join("|")})\\b`, "i"),
+        };
+    })();
 
     /**
      * An object containing bound methods for getting colors from `fromFormat` methods.
@@ -359,7 +528,7 @@ class CSSpectrum {
                 return key;
             }
         }
-        throw new Error("Invalid color format");
+        throw new Error(`Invalid color format: ${color}`);
     }
 
     /**
@@ -428,10 +597,6 @@ class CSSpectrum {
             AA: 4.5,
             AAA: 7.0,
         };
-
-        if (!(level in levels)) {
-            throw new Error("Invalid WCAG level. Use 'AA' or 'AAA'.");
-        }
 
         return contrast >= levels[level];
     }
@@ -520,10 +685,10 @@ class CSSpectrum {
      */
     fromNamed(named: string) {
         const cleanedName = named.replace(/(?:\s+|-)/g, "").toLowerCase();
-        const rgb = cssColors[cleanedName];
+        const rgb = namedColors[cleanedName];
 
         if (!rgb) {
-            throw new Error("Invalid named color");
+            throw new Error(`Invalid named color: ${named}`);
         }
 
         this.rgba = [rgb[0], rgb[1], rgb[2], rgb[3] ?? 1];
@@ -562,7 +727,7 @@ class CSSpectrum {
             b = parseInt(hexStr.slice(4, 6), 16);
             a = parseInt(hexStr.slice(6, 8), 16) / 255;
         } else {
-            throw new Error("Invalid HEX color format");
+            throw new Error(`Invalid HEX color format: ${hex}`);
         }
 
         this.rgba = [r, g, b, a];
@@ -579,7 +744,7 @@ class CSSpectrum {
     fromRGB(rgb: string) {
         const numbers = rgb.match(/[\d.]+%?/g);
         if (!numbers || numbers.length < 3) {
-            throw new Error("Invalid RGB(A) format");
+            throw new Error(`Invalid RGB(A) format: ${rgb}`);
         }
 
         const [r, g, b] = numbers.slice(0, 3).map((n) => parseFloat(n));
@@ -629,7 +794,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid HSL(A) format");
+            throw new Error(`Invalid HSL(A) format: ${hsl}`);
         }
 
         const hStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -723,7 +888,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid HWB(A) format");
+            throw new Error(`Invalid HWB(A) format: ${hwb}`);
         }
 
         const hStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -816,7 +981,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid LAB(A) format");
+            throw new Error(`Invalid LAB(A) format: ${lab}`);
         }
 
         const LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -886,7 +1051,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid LCH(A) format");
+            throw new Error(`Invalid LCH(A) format: ${lch}`);
         }
 
         let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -960,7 +1125,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid OKLAB(A) format");
+            throw new Error(`Invalid OKLAB(A) format: ${oklab}`);
         }
 
         let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -1029,7 +1194,7 @@ class CSSpectrum {
         }
 
         if (parts.length < 3) {
-            throw new Error("Invalid OKLCH(A) format");
+            throw new Error(`Invalid OKLCH(A) format: ${oklch}`);
         }
 
         let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
@@ -1240,12 +1405,10 @@ class CSSpectrum {
      */
     private mixWith(color: string, amount: number) {
         const other = new CSSpectrum().fromUnknown(color);
-        const [r1, g1, b1, a1] = this.rgba;
+        const [r1, g1, b1, a1 = 1] = this.rgba;
+
         const match = other.getRGB().match(/\d+/g);
-        if (!match) {
-            throw new Error("Invalid RGB format");
-        }
-        const [r2, g2, b2, a2] = match.map(Number);
+        const [r2, g2, b2, a2 = 1] = match?.map(Number) as number[];
 
         this.rgba = [
             r1 + (r2 - r1) * amount,
@@ -1309,7 +1472,7 @@ class CSSpectrum {
      */
     private getNextColor(currentIndex: number) {
         if (isNaN(currentIndex)) {
-            throw new Error("Invalid index input.");
+            throw new Error(`Invalid index input: ${currentIndex}`);
         }
 
         const patterns = CSSpectrum.patterns;
@@ -1358,7 +1521,7 @@ class CSSpectrum {
             return undefined;
         }
 
-        for (const [name, rgb] of Object.entries(cssColors)) {
+        for (const [name, rgb] of Object.entries(namedColors)) {
             if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
                 return name;
             }
@@ -1404,19 +1567,24 @@ class CSSpectrum {
      *                   otherwise in the format `rgba(r, g, b, a)`.
      */
     private getRGB(modern: boolean = false) {
-        const [r, g, b, a] = this.rgba;
+        const [r, g, b, a = 1] = this.rgba;
+
         if (modern || this.options?.modern) {
             if (a === 1) {
                 return `rgb(${r} ${g} ${b})`;
             } else {
-                const alphaPercentage = Math.round((a as number) * 100);
+                const alphaPercentage = Math.round(a * 100);
                 return `rgb(${r} ${g} ${b} / ${alphaPercentage}%)`;
             }
         } else {
+            const rInt = Math.round(r);
+            const gInt = Math.round(g);
+            const bInt = Math.round(b);
+
             if (a === 1) {
-                return `rgb(${r}, ${g}, ${b})`;
+                return `rgb(${rInt}, ${gInt}, ${bInt})`;
             } else {
-                return `rgba(${r}, ${g}, ${b}, ${a})`;
+                return `rgba(${rInt}, ${gInt}, ${bInt}, ${a})`;
             }
         }
     }
@@ -1431,7 +1599,7 @@ class CSSpectrum {
      *                   Otherwise, the format will be `hsla(h, s%, l%, a)`.
      */
     private getHSL(modern: boolean = false) {
-        const [r, g, b, a] = this.rgba;
+        const [r, g, b, a = 1] = this.rgba;
         const rNorm = r / 255;
         const gNorm = g / 255;
         const bNorm = b / 255;
@@ -1462,7 +1630,7 @@ class CSSpectrum {
             if (a === 1) {
                 return `hsl(${h} ${s}% ${l}%)`;
             } else {
-                const alphaPercentage = Math.round((a as number) * 100);
+                const alphaPercentage = Math.round(a * 100);
                 return `hsl(${h} ${s}% ${l}% / ${alphaPercentage}%)`;
             }
         } else {

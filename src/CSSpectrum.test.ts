@@ -79,23 +79,23 @@ describe("CSSpectrum", () => {
     });
 
     it("should lighten a color correctly", () => {
-        const color = new CSSpectrum().fromHEX("#FF5733");
-        expect(color.lighten(0.1).getRGB()).toBe("rgb(255, 103.8, 71.4)");
+        const color = new CSSpectrum({ modern: true }).fromHEX("#FF5733");
+        expect(color.lighten(0.1).getRGB()).toBe("rgb(255 103.8 71.4)");
     });
 
     it("should darken a color correctly", () => {
-        const color = new CSSpectrum().fromHEX("#FF5733");
-        expect(color.darken(0.1).getRGB()).toBe("rgb(229.5, 78.3, 45.9)");
+        const color = new CSSpectrum({ modern: true }).fromHEX("#FF5733");
+        expect(color.darken(0.1).getRGB()).toBe("rgb(229.5 78.3 45.9)");
     });
 
     it("should saturate a color correctly", () => {
         const color = new CSSpectrum().fromHEX("#FF5733");
-        expect(color.saturate(0.1).getRGB()).toBe("rgb(255, 70.2, 30.599999999999998)");
+        expect(color.saturate(0.1).getRGB()).toBe("rgb(255, 70, 31)");
     });
 
     it("should desaturate a color correctly", () => {
-        const color = new CSSpectrum().fromHEX("#FF5733");
-        expect(color.desaturate(0.2).getRGB()).toBe("rgb(214.2, 79.8, 51)");
+        const color = new CSSpectrum({ modern: true }).fromHEX("#FF5733");
+        expect(color.desaturate(0.2).getRGB()).toBe("rgb(214.2 79.8 51)");
     });
 
     it("should rotate a color correctly", () => {
@@ -133,4 +133,77 @@ describe("CSSpectrum", () => {
     //     const randomColor = CSSpectrum.random("HEX");
     //     expect(CSSpectrum.type(randomColor)).toBe("HEX");
     // });
+});
+
+describe("CSSpectrum Patterns", () => {
+    const testCases: { name: keyof typeof CSSpectrum.patterns; valid: string[]; invalid: string[] }[] = [
+        {
+            name: "HEX",
+            valid: ["#f09", "#ff0099", "#f09a", "#ff0099cc"],
+            invalid: ["#ff", "#ff000", "#ggg"],
+        },
+        {
+            name: "RGB",
+            valid: [
+                "rgb(255, 87, 51)",
+                "rgb(255 87 51)",
+                "rgba(255, 87, 51, 0.5)",
+                "rgb(255 87 51 / 80%)",
+                "rgb(0, 0, 0)",
+            ],
+            invalid: ["rgb(256, 87, 51)", "rgb(255, 87)", "rgb(255, 87, 51, 1, 2)"],
+        },
+        {
+            name: "HSL",
+            valid: ["hsl(9, 100%, 60%)", "hsl(976452 100% 60%)", "hsla(-9, 100%, 60%, 0.5)", "hsl(9 100% 60% / 50%)"],
+            invalid: ["hsl(9, 100, 60%)", "hsl(361, 100%, 600%)"],
+        },
+        {
+            name: "HWB",
+            valid: ["hwb(12, 50%, 0%)", "hwb(12 50% 0%)", "hwb(194, 0%, 0%, 0.5)", "hwb(194 0% 0% / 0.5)"],
+            invalid: ["hwb(12, 50, 0%)", "hwb(12, 150%, 0%)"],
+        },
+        {
+            name: "LAB",
+            valid: ["lab(50%, 40, 59.5)", "lab(50% 40 59.5)", "lab(50% 40 59.5 / 0.5)"],
+            invalid: ["lab(50, 40, 59.5)", "lab(150%, 40, 59.5)"],
+        },
+        {
+            name: "LCH",
+            valid: ["lch(52.2%, 72.2, 50)", "lch(52.2% 72.2 50)", "lch(52.2% 72.2 50 / 0.5)"],
+            invalid: ["lch(52.2, 72.2, 50)", "lch(52.2%, -72.2, 50)"],
+        },
+        {
+            name: "Oklab",
+            valid: ["oklab(59%, 0.1, 0.1)", "oklab(59% 0.1 0.1)", "oklab(59% 0.1 0.1 / 0.5)"],
+            invalid: ["oklab(59, 0.1, 0.1)", "oklab(59% 0.1)"],
+        },
+        {
+            name: "Oklch",
+            valid: ["oklch(60%, 0.15, 50)", "oklch(60% 0.15 50)", "oklch(60% 0.15 50 / 0.5)"],
+            invalid: ["oklch(60, 0.15, 50)", "oklch(60% 0.15)"],
+        },
+        {
+            name: "named",
+            valid: ["rebeccapurple", "aliceblue", "red", "DarkSlateGray"],
+            invalid: ["notacolor", "reddish"],
+        },
+    ];
+
+    testCases.forEach(
+        ({ name, valid, invalid }: { name: keyof typeof CSSpectrum.patterns; valid: string[]; invalid: string[] }) => {
+            describe(`${name} pattern`, () => {
+                valid.forEach((color) => {
+                    it(`should match valid ${name} color: "${color}"`, () => {
+                        expect(color).toMatch(CSSpectrum.patterns[name]);
+                    });
+                });
+                invalid.forEach((color) => {
+                    it(`should NOT match invalid ${name} color: "${color}"`, () => {
+                        expect(color).not.toMatch(CSSpectrum.patterns[name]);
+                    });
+                });
+            });
+        }
+    );
 });
