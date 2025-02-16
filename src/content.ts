@@ -1,4 +1,4 @@
-import { Color } from "./Color";
+import Color from "./Color";
 
 /**
  * Processes a text node to find and highlight color patterns within the text.

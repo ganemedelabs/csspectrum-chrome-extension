@@ -1,3 +1,114 @@
+/**
+ * @license
+ * MIT License
+ *
+ * Copyright (c) 2025 Ganemede Labs
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * (Full text available in the LICENSE file)
+ *
+ * ========================================================
+ *
+ * MODIFICATION GUIDELINES:
+ *
+ * ────────────────────────────────────────────────────────
+ * 1. Adding Named Colors
+ * ────────────────────────────────────────────────────────
+ *
+ * Steps:
+ * 1. Add the color name and RGBA values to the `namedColors` object
+ *
+ * Example:
+ * ```typescript
+ * const namedColors = {
+ *     // ... existing colors
+ *     neonpink: [255, 0, 255], // [R, G, B] or [R, G, B, A]
+ *     transparentblack: [0, 0, 0, 0.5]
+ * };
+ * ```
+ *
+ * ────────────────────────────────────────────────────────
+ * 2. Adding New Color Formats
+ * ────────────────────────────────────────────────────────
+ *
+ * Implementation Steps:
+ * 1. PATTERN: Add format detection regex to `Color.patterns` object
+ * 2. PARSER: Create `from<Format>` method in Color class
+ * 3. SERIALIZER: Create `get<Format>` method in ColorInstance class
+ *
+ * Example: Adding 'myformat' support
+ * ```typescript
+ * // 1. Add pattern detection
+ * const patterns = {
+ *     // ... existing patterns
+ *     myformat: /myformat\(([^)]+)\)/i
+ * };
+ *
+ * // 2. Implement parser
+ * class Color {
+ *     fromMyFormat(value: string) {
+ *         const match = value.match(patterns.myformat);
+ *         if (!match) throw new Error("Invalid myformat color");
+ *         const [r, g, b] = match[1].split(",").map(Number);
+ *         this.rgba = [r, g, b, 1];
+ *         return this.finalize();
+ *     }
+ * }
+ *
+ * // 3. Implement serializer
+ * class ColorInstance {
+ *     getMyFormat() {
+ *         const [r, g, b] = this.rgba;
+ *         return `myformat(${r}, ${g}, ${b})`;
+ *     }
+ * }
+ * ```
+ *
+ * Naming Convention:
+ * - Pattern key: camelCase (e.g., 'myFormat', 'XYZ')
+ * - Parser method: `from<Format>` (e.g., `fromMyFormat`, `fromXYZ`)
+ * - Serializer method: `get<Format>` (e.g., `getMyFormat`, `getXYZ`)
+ *
+ * ────────────────────────────────────────────────────────
+ * 3. Adding Color Manipulation Methods
+ * ────────────────────────────────────────────────────────
+ *
+ * Implementation Steps:
+ * 1. Create method in ColorInstance class that modifies `this.rgba` directly
+ * and returns `this`
+ *
+ * Example: Brightness adjustment method
+ * ```typescript
+ * class ColorInstance {
+ *     adjustBrightness(amount: number) {
+ *         this.rgba = this.rgba.map((v, i) =>
+ *             i < 3 ? Math.min(255, Math.max(0, v + amount)) : v
+ *         ) as RGBA;
+ *         return this;
+ *     }
+ * }
+ * ```
+ *
+ * Key Requirements:
+ * - Always modify `this.rgba` array directly
+ * - Maintain alpha channel unless explicitly changed
+ * - Return `this.finalize()` for chainability
+ *
+ * ────────────────────────────────────────────────────────
+ * ARCHITECTURAL NOTES
+ * ────────────────────────────────────────────────────────
+ * - RGBA array format: [0-255, 0-255, 0-255, 0-1]
+ * - All conversions must normalize to RGBA
+ * - Finalize() handles accessing the ColorInstance methods
+ * - Pattern names must match method suffixes exactly
+ */
+
 type RGBA = [number, number, number, number?];
 
 type Options = {
@@ -172,10 +283,10 @@ const namedColors: { [named: string]: [number, number, number, number?] } = {
  * Represents an instance of a color with various methods to manipulate and retrieve color values.
  */
 class ColorInstance {
-    private color: Color;
-    private rgba: RGBA;
-    private name: string | undefined;
-    private options: Options | undefined;
+    protected color: Color;
+    protected rgba: RGBA;
+    protected name: string | undefined;
+    protected options: Options | undefined;
 
     constructor(color: Color & ColorProps) {
         this.color = color as Color;
@@ -843,17 +954,17 @@ class Color {
     /**
      * Represents the RGBA color value.
      */
-    private _rgba: RGBA = [0, 0, 0, 1];
+    protected _rgba: RGBA = [0, 0, 0, 1];
 
     /**
      * The name of the color if it is a named CSS color.
      */
-    private name: string | undefined;
+    protected name: string | undefined;
 
     /**
      * An object containing configuration options.
      */
-    private options: Options = {};
+    protected options: Options = {};
 
     /**
      * Initializes a new instance of the `Color` class.
@@ -869,7 +980,7 @@ class Color {
      *
      * @returns {number[]} An array representing the RGBA color value.
      */
-    private get rgba() {
+    protected get rgba() {
         return this._rgba;
     }
 
@@ -883,7 +994,7 @@ class Color {
      * If the alpha value is 1, the method checks if the RGB values match any predefined CSS color names.
      * If a match is found, the color name is assigned to the `name` property.
      */
-    private set rgba(newValue: [number, number, number, number?]) {
+    protected set rgba(newValue: [number, number, number, number?]) {
         const [r, g, b, a = 1] = newValue;
 
         if (a === 1) {
@@ -899,9 +1010,9 @@ class Color {
     }
 
     /**
-     * ############################
-     * ##### Static Variables #####
-     * ############################
+     * ────────────────────────────────────────────────────────
+     * Static Variables
+     * ────────────────────────────────────────────────────────
      */
 
     /**
@@ -1127,9 +1238,9 @@ class Color {
     })();
 
     /**
-     * ##########################
-     * ##### Static Methods #####
-     * ##########################
+     * ────────────────────────────────────────────────────────
+     * Static Methods
+     * ────────────────────────────────────────────────────────
      */
 
     /**
@@ -1279,9 +1390,9 @@ class Color {
     }
 
     /**
-     * ###################################
-     * ##### Public Instance Methods #####
-     * ###################################
+     * ────────────────────────────────────────────────────────
+     * Public Instance Methods
+     * ────────────────────────────────────────────────────────
      */
 
     /**
@@ -1865,9 +1976,9 @@ class Color {
     }
 
     /**
-     * ####################################
-     * ##### Private Instance Methods #####
-     * ####################################
+     * ────────────────────────────────────────────────────────
+     * Private Instance Methods
+     * ────────────────────────────────────────────────────────
      */
 
     /**
@@ -1876,9 +1987,10 @@ class Color {
      *
      * @returns {ColorInstance} A new instance of ColorInstance with the current properties.
      */
-    finalize() {
+    protected finalize(): ColorInstance {
         return new ColorInstance({ ...this, rgba: this.rgba, name: this.name, options: this.options });
     }
 }
 
-export { Color, ColorInstance, namedColors, type RGBA, type Options, type ColorProps };
+export default Color;
+export { ColorInstance, namedColors, type RGBA, type Options, type ColorProps };
