@@ -55,7 +55,7 @@ const config = [
             indent: ["warn", 4],
             quotes: ["warn", "double"],
             "no-unused-vars": "warn",
-            "@typescript-eslint/no-unused-vars": "warn",
+            "@typescript-eslint/no-unused-vars": "off",
             "@typescript-eslint/no-var-requires": "off",
             "@typescript-eslint/no-require-imports": "off",
             "import/no-unresolved": "off",

@@ -22,13 +22,11 @@ describe("Color", () => {
     });
 
     it("should convert HEX to RGB", () => {
-        const color = new Color();
-        expect(color.fromHEX("#FF5733").getRGB()).toBe("rgb(255, 87, 51)");
+        expect(Color.from("#FF5733").to("RGB")).toBe("rgb(255, 87, 51)");
     });
 
     it("should convert named color to RGB", () => {
-        const color = new Color();
-        expect(color.fromNamed("red").getRGB()).toBe("rgb(255, 0, 0)");
+        expect(Color.from("red").to("RGB")).toBe("rgb(255, 0, 0)");
     });
 
     it("should calculate luminance correctly", () => {
@@ -51,82 +49,65 @@ describe("Color", () => {
     });
 
     it("should throw an error for invalid color format", () => {
-        expect(() => Color.type("invalid")).toThrow("Invalid color format");
-    });
-
-    it("should throw an error for invalid color format", () => {
-        expect(() => new Color().fromUnknown("invalid")).toThrow("Invalid color format");
+        expect(() => Color.type("invalid")).toThrow("Unsupported color format: invalid");
     });
 
     it("should convert RGB to RGBA correctly", () => {
-        const color = new Color();
-        expect(color.fromRGB("rgb(255, 87, 51)").getRGB()).toBe("rgb(255, 87, 51)");
+        expect(Color.from("rgb(255, 87, 51)").to("RGB")).toBe("rgb(255, 87, 51)");
     });
 
     it("should convert HSL to RGBA correctly", () => {
-        const color = new Color();
-        expect(color.fromHSL("hsl(9, 100%, 60%)").getRGB()).toBe("rgb(255, 82, 51)");
+        expect(Color.from("hsl(9, 100%, 60%)").to("RGB")).toBe("rgb(255, 82, 51)");
     });
 
     it("should convert HWB to RGBA correctly", () => {
-        const color = new Color();
-        expect(color.fromHWB("hwb(9, 0%, 0%)").getRGB()).toBe("rgb(255, 38, 0)");
+        expect(Color.from("hwb(9, 0%, 0%)").to("RGB")).toBe("rgb(255, 38, 0)");
     });
 
     it("should convert LAB to RGBA correctly", () => {
-        const color = new Color();
-        expect(color.fromLAB("lab(53.23288, 80.10933, 67.22006)").getRGB()).toBe("rgb(255, 0, 0)");
+        expect(Color.from("lab(53.23288%, 80.10933, 67.22006)", "LAB").to("RGB")).toBe("rgb(255, 0, 0)");
     });
 
     it("should lighten a color correctly", () => {
-        const color = new Color({ modern: true }).fromHEX("#FF5733");
-        expect(color.lighten(0.1).getRGB()).toBe("rgb(255 103.8 71.4)");
+        expect(Color.from("#FF5733").lighten(0.1).to("RGB", true)).toBe("rgb(255 103.8 71.4)");
     });
 
     it("should darken a color correctly", () => {
-        const color = new Color({ modern: true }).fromHEX("#FF5733");
-        expect(color.darken(0.1).getRGB()).toBe("rgb(229.5 78.3 45.9)");
+        expect(Color.from("#FF5733").darken(0.1).to("RGB", true)).toBe("rgb(229.5 78.3 45.9)");
     });
 
     it("should saturate a color correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.saturate(0.1).getRGB()).toBe("rgb(255, 70, 31)");
+        expect(Color.from("#FF5733").saturate(0.1).to("RGB")).toBe("rgb(255, 70, 31)");
     });
 
     it("should desaturate a color correctly", () => {
-        const color = new Color({ modern: true }).fromHEX("#FF5733");
-        expect(color.desaturate(0.2).getRGB()).toBe("rgb(214.2 79.8 51)");
+        expect(Color.from("#FF5733").desaturate(0.2).to("RGB", true)).toBe("rgb(214.2 79.8 51)");
     });
 
     it("should rotate a color correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.rotate(30).getRGB()).toBe("rgb(255, 190, 51)");
+        expect(Color.from("#FF5733").rotate(30).to("RGB")).toBe("rgb(255, 190, 51)");
     });
 
     it("should invert a color correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.invert().getRGB()).toBe("rgb(0, 168, 204)");
+        expect(Color.from("#FF5733").invert().to("RGB")).toBe("rgb(0, 168, 204)");
     });
 
     it("should change alpha correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.alpha(0.5).getRGB()).toBe("rgba(255, 87, 51, 0.5)");
+        expect(Color.from("#FF5733").alpha(0.5).to("RGB")).toBe("rgba(255, 87, 51, 0.5)");
     });
 
     it("should mix two colors correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.mixWith("#33FF57", 0.5).getRGB()).toBe("rgb(153, 171, 69)");
+        expect(Color.from("#FF5733").mixWith("#33FF57", 0.5).to("RGB")).toBe("rgb(153, 171, 69)");
     });
 
     it("should clone a color correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
+        const color = Color.from("#FF5733");
         const clone = color.clone();
-        expect(clone.getRGB()).toBe("rgb(255, 87, 51)");
+        expect(clone.to("RGB")).toBe("rgb(255, 87, 51)");
     });
 
     it("should check color equality correctly", () => {
-        const color = new Color().fromHEX("#FF5733");
-        expect(color.equals("rgb(255, 87, 51)")).toBe(true);
+        expect(Color.from("#FF5733").equals("rgb(255, 87, 51)")).toBe(true);
     });
 
     // it("should return a random color of specified type", () => {

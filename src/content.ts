@@ -39,8 +39,6 @@ function processTextNode(textNode: Text, modern = false) {
         }
     }
 
-    new Color().fromOklch("oklch(0 0 0 0)");
-
     if (matches.length === 0) return;
 
     matches.sort((a, b) => a.start - b.start);
@@ -57,7 +55,7 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = new Color().fromUnknown(colorString).getRGB(false);
+        const bgColor = Color.from(colorString).to("RGB", false) as string;
         const isNamedColor = colorPatterns.named.test(matchText);
         const pageBgColor = window.getComputedStyle(document.body).backgroundColor;
 
@@ -81,7 +79,6 @@ function processTextNode(textNode: Text, modern = false) {
             }
 
             let nextColor, nextIndex;
-            const colorClass = new Color({ modern });
 
             const originalNamedColor = wrapper.getAttribute("data-csspectrum-name") || undefined;
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
@@ -89,9 +86,9 @@ function processTextNode(textNode: Text, modern = false) {
             const currentIndexInt = parseInt(currentIndex, 10);
 
             if (originalNamedColor) {
-                [nextColor, nextIndex] = colorClass.fromNamed(originalNamedColor).getNextColor(currentIndexInt);
+                [nextColor, nextIndex] = Color.from(originalNamedColor).toNextColor(currentIndexInt, modern);
             } else {
-                [nextColor, nextIndex] = colorClass.fromRGB(currentColor).getNextColor(currentIndexInt);
+                [nextColor, nextIndex] = Color.from(currentColor).toNextColor(currentIndexInt, modern);
             }
 
             wrapper.textContent = nextColor as string;
