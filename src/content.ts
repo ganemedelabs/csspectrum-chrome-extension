@@ -55,12 +55,12 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = Color.from(colorString).to("RGB", false) as string;
+        const bgColor = Color.from(colorString).to("RGB", { modern: false }) as string;
         const isNamedColor = colorPatterns.named.test(matchText);
         const pageBgColor = window.getComputedStyle(document.body).backgroundColor;
 
         wrapper.style.background = bgColor;
-        wrapper.style.color = Color.isDark(bgColor, pageBgColor) ? "#fff" : "#000";
+        wrapper.style.color = Color.from(bgColor).isDark(pageBgColor) ? "#fff" : "#000";
         wrapper.style.border = `2px solid ${bgColor.startsWith("rgba") ? bgColor.replace(/[^,]+(?=\))/, "1") : bgColor}`;
         wrapper.style.borderRadius = "3px";
         wrapper.style.padding = "0 3px";
@@ -68,7 +68,6 @@ function processTextNode(textNode: Text, modern = false) {
         wrapper.textContent = matchText;
 
         wrapper.setAttribute("data-csspectrum-color", bgColor);
-        wrapper.setAttribute("data-csspectrum-index", "0");
         if (isNamedColor) {
             wrapper.setAttribute("data-csspectrum-name", matchText);
         }
@@ -78,21 +77,18 @@ function processTextNode(textNode: Text, modern = false) {
                 event.preventDefault();
             }
 
-            let nextColor, nextIndex;
+            let nextColor;
 
             const originalNamedColor = wrapper.getAttribute("data-csspectrum-name") || undefined;
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
-            const currentIndex = wrapper.getAttribute("data-csspectrum-index") || "0";
-            const currentIndexInt = parseInt(currentIndex, 10);
 
             if (originalNamedColor) {
-                [nextColor, nextIndex] = Color.from(originalNamedColor).toNextColor(currentIndexInt, modern);
+                nextColor = Color.from(originalNamedColor).to("next", { modern });
             } else {
-                [nextColor, nextIndex] = Color.from(currentColor).toNextColor(currentIndexInt, modern);
+                nextColor = Color.from(currentColor).to("next", { modern });
             }
 
             wrapper.textContent = nextColor as string;
-            wrapper.setAttribute("data-csspectrum-index", nextIndex as string);
         });
 
         fragment.appendChild(wrapper);

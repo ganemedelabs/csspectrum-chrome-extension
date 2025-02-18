@@ -83,16 +83,39 @@
  * - All conversions must normalize to RGBA
  */
 
+/**
+ * Represents a color in the RGBA (Red, Green, Blue, Alpha) color space.
+ */
 type RGBA = [number, number, number, number?];
 
+/**
+ * Options for formatting output.
+ */
+type FormattingOptions = {
+    /**
+     * Use modern color format for RGB and HSL (e.g., `rgb(255 0 0)` instead of `rgb(255, 0, 0)`, or `hsb(0 100% 50%)` instead of `hsb(0, 100%, 50%)`).
+     */
+    modern?: boolean;
+};
+
+/**
+ * A type representing a collection of color converters.
+ * Each converter is identified by a string key and contains:
+ * - `pattern`: A regular expression to match the color format.
+ * - `parse`: A function that takes a color string and returns an RGBA object.
+ * - `format`: A function that takes an RGBA object and optional formatting options, and returns a formatted color string or undefined.
+ */
 type Converters = {
     [type: string]: {
         pattern: RegExp;
-        parse: (color: string, ...args: any[]) => RGBA; // eslint-disable-line no-unused-vars, @typescript-eslint/no-explicit-any
-        format: (rgba: RGBA, ...args: any[]) => string | undefined; // eslint-disable-line no-unused-vars, @typescript-eslint/no-explicit-any
+        parse: (color: string) => RGBA; // eslint-disable-line no-unused-vars
+        format: (rgba: RGBA, options?: FormattingOptions) => string | undefined; // eslint-disable-line no-unused-vars
     };
 };
 
+/**
+ * A collection of named colors and their RGBA values.
+ */
 const namedColors: { [named: string]: [number, number, number, number?] } = {
     cornsilk: [255, 248, 220],
     blanchedalmond: [255, 235, 205],
@@ -244,6 +267,13 @@ const namedColors: { [named: string]: [number, number, number, number?] } = {
     transparent: [0, 0, 0, 0],
 };
 
+/**
+ * An object containing various color format converters.
+ * Each converter includes:
+ * - `pattern` for matching the format,
+ * - `parse` function to convert the format to RGBA,
+ * - `format` function to convert RGBA back to the format.
+ */
 const converters = (() => {
     const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
     const rgbNum = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|\\d{1,2})(?:\\.\\d+)?";
@@ -375,10 +405,10 @@ const converters = (() => {
 
                 return [r, g, b, a];
             },
-            format: (rgba, modern: boolean = false) => {
+            format: (rgba, options = { modern: false }) => {
                 const [r, g, b, a = 1] = rgba;
 
-                if (modern) {
+                if (options.modern) {
                     if (a === 1) {
                         return `rgb(${r} ${g} ${b})`;
                     } else {
@@ -513,7 +543,7 @@ const converters = (() => {
 
                 return [red, green, blue, alpha];
             },
-            format: (rgba, modern: boolean = false) => {
+            format: (rgba, options = { modern: false }) => {
                 const [r, g, b, a = 1] = rgba;
                 const rNorm = r / 255;
                 const gNorm = g / 255;
@@ -541,7 +571,7 @@ const converters = (() => {
                 const s = Math.round(saturation * 100);
                 const l = Math.round(lightness * 100);
 
-                if (modern) {
+                if (options.modern) {
                     if (a === 1) {
                         return `hsl(${h} ${s}% ${l}%)`;
                     } else {
@@ -1210,20 +1240,79 @@ const converters = (() => {
     };
 })() satisfies Converters;
 
+/**
+ * The `Color` class represents a color in the RGBA format and provides various methods for color manipulation, conversion, and analysis.
+ *
+ * @example
+ * ```typescript
+ * Color.from("hsl(0 100% 50%)")to("RGB"); // "rgb(255 0 0)"
+ * Color.from("#F00").to("HWB"); // "hwb(0 0% 0%)"
+ * Color.from("lab(53.24% 80.09 67.2)").to("named"); // "red"
+ * Color.from("rgb(255 0 0)").darken(0.5).to("HSL"); // "hsl(0 100% 25%)"
+ * Color.from("hsl(0 100% 50%)").sepia().to("HEX"); // "#FFC299"
+ * ```
+ *
+ * @example
+ * ```typescript
+ * Color.isValid("HSL", "hsl(0 100% 50%)"); // true
+ * Color.from("red").isWarm(); // true
+ * Color.from("#F00").getLuminance(); // 0.2126
+ * Color.type("lch(53.24% 80.09 67.2)"); // "LCH"
+ * Color.isAccessiblePair("#000", "#FFF"); // true
+ * ```
+ *
+ * @example
+ * ```typescript
+ * const color = Color.from("#FF5733").lighten(0.5).saturate(0.5).rotate(30).alpha(0.5);
+ * color.to("RGB"); // "rgba(255, 207, 102, 0.5)"
+ * ```
+ */
 class Color {
+    /**
+     * Represents the RGBA color value.
+     * The array contains four elements:
+     * - Red component (0-255)
+     * - Green component (0-255)
+     * - Blue component (0-255)
+     * - Alpha component (0-1)
+     */
     private _rgba: RGBA = [0, 0, 0, 1];
 
+    /**
+     * The name of the color.
+     * This property can be a string or undefined.
+     */
     private name: string | undefined;
+
+    /**
+     * The index representing the current color format.
+     * This is used to track which color format is currently selected.
+     */
+    private currentFormatIndex: number = 0;
 
     constructor(rgba: RGBA) {
         this.rgba = rgba;
     }
 
+    /**
+     * Gets the RGBA color value.
+     *
+     * @returns {string} The RGBA color value as a string.
+     */
     private get rgba() {
         return this._rgba;
     }
 
-    private set rgba(newValue: [number, number, number, number?]) {
+    /**
+     * Sets the RGBA color value.
+     *
+     * @param {RGBA} newValue - An array containing the red, green, blue, and optional alpha values.
+     *                        - Red (r): A number between 0 and 255.
+     *                        - Green (g): A number between 0 and 255.
+     *                        - Blue (b): A number between 0 and 255.
+     *                        - Alpha (a): An optional number between 0 and 1. Defaults to 1 if not provided.
+     */
+    private set rgba(newValue: RGBA) {
         const [r, g, b, a = 1] = newValue;
 
         if (a === 1) {
@@ -1235,9 +1324,7 @@ class Color {
             }
         }
 
-        if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 1) {
-            throw new Error("Invalid color values: RGB values should be between 0 and 255, and alpha between 0 and 1.");
-        }
+        this._rgba = [Math.min(Math.max(r, 0), 255), Math.min(Math.max(g, 0), 255), Math.min(Math.max(b, 0), 255), a];
 
         this._rgba = newValue;
     }
@@ -1248,6 +1335,9 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    /**
+     * A collection of regular expressions for parsing color strings.
+     */
     // eslint-disable-next-line no-unused-vars
     static patterns: { [K in keyof typeof converters]: RegExp } = Object.fromEntries(
         Object.entries(converters).map(([key, value]) => [key, value.pattern])
@@ -1265,6 +1355,17 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    /**
+     * Creates a new `Color` instance from a given color string.
+     *
+     * @param {string} color - The color string to parse.
+     * @param {string} format - Optional. The format of the color string. Must be a key of the `converters` object.
+     *
+     * @returns {Color} A new `Color` instance representing the parsed color.
+     *
+     * @throws Will throw an error if the color string does not match the specified format.
+     * @throws Will throw an error if the color string does not match any supported format.
+     */
     static from(color: string, format?: keyof typeof converters) {
         if (format) {
             const { parse, pattern } = converters[format];
@@ -1280,7 +1381,7 @@ class Color {
             }
         }
 
-        throw new Error(`Unsupported color format: ${color}`);
+        throw new Error(`Unsupported color format: ${color}\nSupported formats: ${Object.keys(converters).join(", ")}`);
     }
 
     /**
@@ -1289,87 +1390,92 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    /**
+     * Determines the type of the given color string based on predefined patterns.
+     *
+     * @param {string} color - The color string to be evaluated.
+     * @returns {string} The key corresponding to the matched color pattern.
+     * @throws Will throw an error if the color format is not recognized.
+     */
     static type(color: string) {
-        Color.patterns.named.test("");
         for (const [key, pattern] of Object.entries(Color.patterns)) {
             if (pattern.test(color)) {
                 return key;
             }
         }
-        throw new Error(`Unsupported color format: ${color}`);
+        throw new Error(
+            `Unsupported color format: ${color}\nSupported formats: ${Object.keys(Color.patterns).join(", ")}`
+        );
     }
 
-    static luminance(color: string) {
-        const rgb = Color.from(color).to("RGB") as string;
-        const match = rgb.match(Color.patterns.RGB);
-        if (!match) {
-            console.error("Invalid color format:", color);
-            return null;
-        }
-
-        const [r, g, b] = match.slice(1, 4).map((n) => {
-            const num = parseFloat(n);
-            return n.includes("%") ? (num / 100) * 255 : num;
-        });
-
-        const transform = (channel: number) => {
-            const c = channel / 255;
-            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-        };
-
-        return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b);
-    }
-
+    /**
+     * Calculates the contrast ratio between two colors.
+     * The contrast ratio is determined using the relative luminance of the colors.
+     *
+     * @param {string} color1 - The first color in hexadecimal format (e.g., "#FFFFFF").
+     * @param {string} color2 - The second color in hexadecimal format (e.g., "#000000").
+     * @returns {number} The contrast ratio between the two colors.
+     */
     static contrastRatio(color1: string, color2: string) {
-        const l1 = Color.luminance(color1) as number;
-        const l2 = Color.luminance(color2) as number;
+        const l1 = Color.from(color1).getLuminance();
+        const l2 = Color.from(color2).getLuminance();
         return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
     }
 
-    static isAccessiblePair(color1: string, color2: string, level: "AA" | "AAA" = "AA") {
+    /**
+     * Determines if a pair of colors meets the WCAG contrast ratio requirements.
+     *
+     * This function calculates the contrast ratio between two colors and checks if it meets or exceeds
+     * the minimum thresholds defined by the Web Content Accessibility Guidelines (WCAG). For normal text,
+     * the required ratios are:
+     *   - AA: 4.5:1
+     *   - AAA: 7:1
+     *
+     * For large text (defined as 18pt or 14pt bold or larger), the thresholds are lower:
+     *   - AA: 3:1
+     *   - AAA: 4.5:1
+     *
+     * @param {string} color1 - The first color in a valid CSS format.
+     * @param {string} color2 - The second color in a valid CSS format.
+     * @param {"AA"|"AAA"} [level="AA"] - The accessibility level to check against.
+     * @param {boolean} [isLargeText=false] - Whether the text is considered large. Defaults to false (normal text).
+     * @returns {boolean} True if the contrast ratio meets or exceeds the WCAG threshold for the specified level and text size; otherwise, false.
+     */
+    static isAccessiblePair(color1: string, color2: string, level: "AA" | "AAA" = "AA", isLargeText = false) {
         const contrast = Color.contrastRatio(color1, color2);
 
         const levels = {
-            AA: 4.5,
-            AAA: 7.0,
+            AA: isLargeText ? 3.0 : 4.5,
+            AAA: isLargeText ? 4.5 : 7.0,
         };
 
         return contrast >= levels[level];
     }
 
-    static isDark(color: string, backgroundColor: string = "rgb(255, 255, 255)") {
-        const parseColor = (colorStr: string) => {
-            const match = colorStr.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d*(?:\.\d+)?))?\s*\)/);
-            if (!match) {
-                console.error("Invalid color format:", colorStr);
-                return null;
-            }
-            return {
-                r: Number(match[1]),
-                g: Number(match[2]),
-                b: Number(match[3]),
-                a: match[4] !== undefined ? Number(match[4]) : 1,
-            };
-        };
-
-        const fg = parseColor(Color.from(color).to("RGB") as string);
-        const bg = parseColor(backgroundColor);
-        if (!fg || !bg) {
-            return false;
+    /**
+     * Generates a random color in the specified format.
+     *
+     * @param {string} type - The target format for the random color.
+     * @returns {string} A random color in the specified format.
+     */
+    static random(type: keyof typeof converters) {
+        if (type === "named") {
+            return Object.keys(namedColors)[Math.floor(Math.random() * Object.keys(namedColors).length)];
         }
-
-        const compositeR = fg.r * fg.a + bg.r * (1 - fg.a);
-        const compositeG = fg.g * fg.a + bg.g * (1 - fg.a);
-        const compositeB = fg.b * fg.a + bg.b * (1 - fg.a);
-
-        const luminance = this.luminance(`rgb(${compositeR}, ${compositeG}, ${compositeB})`) as number;
-        return luminance < 0.5;
+        const randomChannel = () => Math.floor(Math.random() * 200 + 30);
+        const randomColor = Color.from(`rgb(${randomChannel()}, ${randomChannel()}, ${randomChannel()})`);
+        return randomColor.to(type) as string;
     }
 
-    static random(type: keyof typeof Color.patterns) {
-        const randomChannel = () => Math.floor(Math.random() * 200 + 30);
-        const randomColor = Color.from(`rgb(${randomChannel()}, ${randomChannel()}, ${randomChannel()}})`);
-        return randomColor.to(type);
+    /**
+     * Checks if the given value matches the pattern for the specified type.
+     *
+     * @param {string} type - The type of pattern to validate against.
+     * @param {String} value - The string value to be validated.
+     * @returns {boolean} Whether the value matches the pattern for the specified type.
+     */
+    static isValid(type: keyof typeof converters, value: string) {
+        return Color.patterns[type].test(value);
     }
 
     /**
@@ -1384,46 +1490,44 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    to(format: keyof typeof converters, ...args: any[]) {
+    /**
+     * Converts the current color to the specified format or cycles to the next format.
+     *
+     * @param {string} format - The target format to convert the color to. If "next" is provided, the method will cycle to the next available format.
+     * @param {Record<string, unknown>} options - An optional object containing conversion options.
+     * @returns {string | undefined} The color in the specified format.
+     * @throws Will throw an error if the specified format is unsupported.
+     */
+    to(format: keyof typeof converters | "next", options: { modern: boolean } = { modern: false }) {
+        if (format === "next") {
+            const patterns = Color.patterns;
+            let formats = Object.keys(patterns);
+
+            if (!this.name) {
+                formats = formats.filter((format) => format !== "named");
+            }
+
+            this.currentFormatIndex = (this.currentFormatIndex + 1) % formats.length;
+            const nextFormat = formats[this.currentFormatIndex];
+
+            let nextColor: string;
+
+            if (nextFormat === "named" && this.name) {
+                nextColor = this.name;
+            } else {
+                const methodName = `${nextFormat[0].toUpperCase()}${nextFormat.slice(1)}` as keyof typeof converters;
+                nextColor = this.to(methodName) as string;
+            }
+
+            return nextColor;
+        }
+
         const converter = converters[format];
-        if (!converter) throw new Error(`Unsupported color format: ${format}`);
-        return converter.format(this.rgba, ...args);
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    toNextColor(currentIndex: number, ...args: any[]): [string, string] {
-        if (isNaN(currentIndex)) {
-            throw new Error(`Invalid index input: ${currentIndex}`);
-        }
-
-        const patterns = Color.patterns;
-
-        if (currentIndex < 0 || currentIndex >= Object.keys(patterns).length) {
-            currentIndex = 0;
-        }
-
-        let formats = Object.keys(patterns);
-
-        if (!this.name) {
-            formats = formats.filter((format) => format !== "named");
-        }
-
-        const newIndex = (currentIndex + 1) % formats.length;
-        const nextFormat = formats[newIndex];
-
-        let nextColor: string, nextIndex: string;
-
-        if (nextFormat === "named" && this.name) {
-            nextColor = this.name;
-            nextIndex = newIndex.toString();
-        } else {
-            const methodName = `${nextFormat[0].toUpperCase() + nextFormat.slice(1)}` as keyof typeof converters;
-            nextColor = this.to(methodName, ...args) as string;
-            nextIndex = newIndex.toString();
-        }
-
-        return [nextColor, nextIndex];
+        if (!converter)
+            throw new Error(
+                `Unsupported color format: ${format}\nSupported formats: ${Object.keys(Color.patterns).join(", ")}`
+            );
+        return converter.format(this.rgba, { modern: options.modern });
     }
 
     /**
@@ -1432,90 +1536,160 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    /**
+     * Lightne the color by a specified amount.
+     *
+     * @param {number} amount - A number between 0 and 1 representing the amount to lighten the color.
+     * @returns {Color} The current color object, with the lightened color values.
+     */
     lighten(amount: number) {
         if (amount > 1) amount = 1;
         if (amount < 0) amount = 0;
 
-        const [r, g, b, a] = this.rgba;
-        this.rgba = [r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount, a];
-        return this;
+        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return Color.from(`hsl(${h} ${s}% ${l + (100 - l) * amount}% ${a})`);
     }
 
+    /**
+     * Darkens the color by a specified amount.
+     *
+     * @param {number} amount - A number between 0 and 1 representing the amount to darken the color.
+     * @returns {Color} The current color object, with the darkened color values.
+     */
     darken(amount: number) {
         if (amount > 1) amount = 1;
         if (amount < 0) amount = 0;
 
-        const [r, g, b, a] = this.rgba;
-        this.rgba = [r - r * amount, g - g * amount, b - b * amount, a];
-        return this;
+        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return Color.from(`hsl(${h} ${s}% ${l - l * amount}% ${a})`);
     }
 
+    /**
+     * Saturates the color by a sepcified amount.
+     *
+     * @param {number} amount - The amount to saturate the color, between 0 and 1.
+     * @returns {Color} The current color object, with the new saturation value.
+     */
     saturate(amount: number) {
         if (amount > 1) amount = 1;
         if (amount < 0) amount = 0;
 
-        const [r, g, b, a] = this.rgba;
-        this.rgba = [
-            r + (r - Math.max(r, g, b)) * amount,
-            g + (g - Math.max(r, g, b)) * amount,
-            b + (b - Math.max(r, g, b)) * amount,
-            a,
-        ];
-        return this;
+        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return Color.from(`hsl(${h} ${s + (100 - s) * amount}% ${l}% ${a})`);
     }
 
+    /**
+     * Desaturates the color by a sepcified amount.
+     *
+     * @param {number} amount - The amount to desaturate the color, between 0 and 1.
+     * @returns {Color} The current color object, with the desaturated color values.
+     */
     desaturate(amount: number) {
         if (amount > 1) amount = 1;
         if (amount < 0) amount = 0;
 
-        const [r, g, b, a] = this.rgba;
-        this.rgba = [
-            r - (r - Math.min(r, g, b)) * amount,
-            g - (g - Math.min(r, g, b)) * amount,
-            b - (b - Math.min(r, g, b)) * amount,
-            a,
-        ];
-        return this;
+        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return Color.from(`hsl(${h} ${s - s * amount}% ${l}% ${a})`);
     }
 
+    /**
+     * Rotates the hue of the color by a specified amount.
+     *
+     * @param {number} amount - The amount to rotate the hue by, in degrees.
+     * @returns {Color} The current color object, with the rotated hue.
+     */
     rotate(amount: number) {
         const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
         return Color.from(`hsl(${(Number(h) + amount + 360) % 360}, ${s}%, ${l}%, ${a})`);
     }
 
+    /**
+     * Inverts the current color by subtracting each RGB component from 255.
+     *
+     * @returns {Color} The current color object, with the inverted color values.
+     */
     invert() {
         const [r, g, b, a] = this.rgba;
         this.rgba = [255 - r, 255 - g, 255 - b, a];
         return this;
     }
 
+    /**
+     * Converts the current color to grayscale by averaging the red, green, and blue components.
+     *
+     * @returns {Color} The current color object, with the grayscale filter applied.
+     */
+    grayscale() {
+        const [r, g, b, a] = this.rgba;
+        const avg = (r + g + b) / 3;
+        this.rgba = [avg, avg, avg, a];
+        return this;
+    }
+
+    /**
+     * Applies a sepia filter to the current color.
+     *
+     * @returns {Color} The current color object, with the sepia filter applied.
+     */
+    sepia() {
+        const [r, g, b, a] = this.rgba;
+        const avg = (r + g + b) / 3;
+        this.rgba = [Math.min(255, avg + 100), Math.min(255, avg + 50), Math.min(255, avg), a];
+        return this;
+    }
+
+    /**
+     * Sets the alpha (opacity) value of the color.
+     *
+     * @param {number} amount - The alpha value to set, ranging from 0 (fully transparent) to 1 (fully opaque).
+     * @returns {Color} The current color object, with the new alpha value.
+     */
     alpha(amount: number) {
         this.rgba = [this.rgba[0], this.rgba[1], this.rgba[2], amount];
         return this;
     }
 
+    /**
+     * Sets the red component of the color.
+     *
+     * @param {number} amount - The value to set the red component to.
+     * @returns {Color} The current color object, with the new red component value.
+     */
     red(amount: number) {
         this.rgba = [amount, this.rgba[1], this.rgba[2], this.rgba[3]];
         return this;
     }
 
+    /**
+     * Sets the green component of the color.
+     *
+     * @param {number} amount - The value to set the green component to.
+     * @returns {Color} The current color object, with the new green component value.
+     */
     green(amount: number) {
         this.rgba = [this.rgba[0], amount, this.rgba[2], this.rgba[3]];
         return this;
     }
 
+    /**
+     * Sets the blue component of the color.
+     *
+     * @param {number} amount - The value to set the blue component to.
+     * @returns {Color} The current color object, with the new blue component value.
+     */
     blue(amount: number) {
         this.rgba = [this.rgba[0], this.rgba[1], amount, this.rgba[3]];
         return this;
     }
 
-    orFallback(color: string) {
-        if (!this.isValid(Color.type(color) as keyof typeof Color.patterns, color)) {
-            Color.from(color, "named");
-        }
-        return this;
-    }
-
+    /**
+     * Mixes the current color with another color by a specified amount.
+     *
+     * @param {string} color - The color to mix with, represented as a string.
+     * @param {number} amount - The amount to mix the other color with, ranging from 0 to 1.
+     *                  A value of 0 will result in the original color, while a value of 1 will result in the other color.
+     * @returns {Color} The current color object, with the new mixed color values.
+     */
     mixWith(color: string, amount: number) {
         const other = Color.from(color);
         const [r1, g1, b1, a1 = 1] = this.rgba;
@@ -1538,16 +1712,85 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
-    isValid(type: keyof typeof Color.patterns, value: string) {
-        return Color.patterns[type].test(value);
-    }
-
+    /**
+     * Creates a new instance of the Color class with the same RGBA values.
+     *
+     * @returns {Color} A new Color instance with identical RGBA values.
+     */
     clone() {
         return new Color(this.rgba);
     }
 
+    /**
+     * Compares the current color object with another color string.
+     *
+     * @param {string} color - The color string to compare with the current color object.
+     * @returns {boolean} Whether the two colors are equal.
+     */
     equals(color: string) {
         return this.to("RGB") === Color.from(color).to("RGB");
+    }
+
+    isCool() {
+        const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return h > 60 && h < 300;
+    }
+
+    isWarm() {
+        const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        return h <= 60 || h >= 300;
+    }
+
+    /**
+     * Determines if the color is considered dark compared to a given background color.
+     *
+     * @param {string} backgroundColor - The background color to compare against, in any supported format. Defaults to "rgb(255, 255, 255)".
+     * @returns {boolean} A boolean indicating whether the color is dark compared to the background color.
+     * @throws Will throw an error if the luminance of the color or the background color cannot be determined.
+     */
+    isDark(backgroundColor: string = "rgb(255, 255, 255)") {
+        const colorLuminance = this.getLuminance();
+        const backgroundColorLuminance = Color.from(backgroundColor).getLuminance();
+
+        if (colorLuminance === null || backgroundColorLuminance === null) {
+            throw new Error("Invalid color values provided.");
+        }
+
+        const [dark, light] = [colorLuminance, backgroundColorLuminance].sort((a, b) => a - b);
+        return light / dark > 1.6;
+    }
+
+    /**
+     * Determines if the color is considered light compared to a given background color.
+     *
+     * @param {string} backgroundColor - The background color to compare against, in any supported format. Defaults to "rgb(255, 255, 255)".
+     * @returns {boolean} A boolean indicating whether the color is light compared to the background color.
+     * @throws Will throw an error if the luminance of the color or the background color cannot be determined.
+     */
+    isLight(backgroundColor: string = "rgb(255, 255, 255)") {
+        return !this.isDark(backgroundColor);
+    }
+
+    /**
+     * Calculates the luminance of the color.
+     *
+     * The luminance is computed using the formula defined by the WCAG guidelines:
+     * L = 0.2126 * R + 0.7152 * G + 0.0722 * B
+     * where R, G, and B are the linearized values of the red, green, and blue channels respectively.
+     *
+     * The linearization process involves transforming the sRGB values to a linear space.
+     *
+     * @returns {number} The luminance of the color, a value between 0 and 1.
+     */
+    getLuminance() {
+        const [r, g, b] = this.rgba;
+
+        const transform = (channel: number) => {
+            const c = channel / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        };
+
+        return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b);
     }
 }
 

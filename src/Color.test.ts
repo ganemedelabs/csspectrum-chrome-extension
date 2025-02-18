@@ -30,8 +30,8 @@ describe("Color", () => {
     });
 
     it("should calculate luminance correctly", () => {
-        expect(Color.luminance("rgb(255, 255, 255)")).toBeCloseTo(1);
-        expect(Color.luminance("rgb(0, 0, 0)")).toBeCloseTo(0);
+        expect(Color.from("rgb(255, 255, 255)").getLuminance()).toBeCloseTo(1);
+        expect(Color.from("rgb(0, 0, 0)").getLuminance()).toBeCloseTo(0);
     });
 
     it("should calculate contrast ratio correctly", () => {
@@ -41,11 +41,18 @@ describe("Color", () => {
     it("should determine if a color pair is accessible", () => {
         expect(Color.isAccessiblePair("#FFFFFF", "#000000", "AA")).toBe(true);
         expect(Color.isAccessiblePair("#FFFFFF", "#CCCCCC", "AAA")).toBe(false);
+        expect(Color.isAccessiblePair("#FFFFFF", "#000000", "AA", true)).toBe(true);
+        expect(Color.isAccessiblePair("#FFFFFF", "#CCCCCC", "AAA", true)).toBe(false);
     });
 
     it("should determine if a color is dark", () => {
-        expect(Color.isDark("rgb(0, 0, 0)")).toBe(true);
-        expect(Color.isDark("rgb(255, 255, 255)")).toBe(false);
+        expect(Color.from("rgb(0, 0, 0)").isDark()).toBe(true);
+        expect(Color.from("rgb(255, 255, 255)").isDark()).toBe(false);
+    });
+
+    it("should determine if a color is light", () => {
+        expect(Color.from("rgb(255, 255, 255)").isLight()).toBe(true);
+        expect(Color.from("rgb(0, 0, 0)").isLight()).toBe(false);
     });
 
     it("should throw an error for invalid color format", () => {
@@ -69,19 +76,19 @@ describe("Color", () => {
     });
 
     it("should lighten a color correctly", () => {
-        expect(Color.from("#FF5733").lighten(0.1).to("RGB", true)).toBe("rgb(255 103.8 71.4)");
+        expect(Color.from("#FF5733").lighten(0.5).to("RGB")).toBe("rgb(255, 172, 153)");
     });
 
     it("should darken a color correctly", () => {
-        expect(Color.from("#FF5733").darken(0.1).to("RGB", true)).toBe("rgb(229.5 78.3 45.9)");
+        expect(Color.from("#FF5733").darken(0.5).to("RGB")).toBe("rgb(153, 28, 0)");
     });
 
     it("should saturate a color correctly", () => {
-        expect(Color.from("#FF5733").saturate(0.1).to("RGB")).toBe("rgb(255, 70, 31)");
+        expect(Color.from("#BF4040").saturate(0.5).to("RGB")).toBe("rgb(223, 32, 32)");
     });
 
     it("should desaturate a color correctly", () => {
-        expect(Color.from("#FF5733").desaturate(0.2).to("RGB", true)).toBe("rgb(214.2 79.8 51)");
+        expect(Color.from("#FF5733").desaturate(0.5).to("RGB")).toBe("rgb(204, 121, 102)");
     });
 
     it("should rotate a color correctly", () => {
@@ -94,6 +101,26 @@ describe("Color", () => {
 
     it("should change alpha correctly", () => {
         expect(Color.from("#FF5733").alpha(0.5).to("RGB")).toBe("rgba(255, 87, 51, 0.5)");
+    });
+
+    it("should convert to grayscale correctly", () => {
+        expect(Color.from("#FF5733").grayscale().to("RGB")).toBe("rgb(131, 131, 131)");
+    });
+
+    it("should convert to sepia correctly", () => {
+        expect(Color.from("#FF5733").sepia().to("RGB")).toBe("rgb(231, 181, 131)");
+    });
+
+    it("should change red channel correctly", () => {
+        expect(Color.from("#FF5733").red(0).to("RGB")).toBe("rgb(0, 87, 51)");
+    });
+
+    it("should change green channel correctly", () => {
+        expect(Color.from("#FF5733").green(0).to("RGB")).toBe("rgb(255, 0, 51)");
+    });
+
+    it("should change blue channel correctly", () => {
+        expect(Color.from("#FF5733").blue(0).to("RGB")).toBe("rgb(255, 87, 0)");
     });
 
     it("should mix two colors correctly", () => {
@@ -110,10 +137,23 @@ describe("Color", () => {
         expect(Color.from("#FF5733").equals("rgb(255, 87, 51)")).toBe(true);
     });
 
-    // it("should return a random color of specified type", () => {
-    //     const randomColor = Color.random("HEX");
-    //     expect(Color.type(randomColor)).toBe("HEX");
-    // });
+    it("should return true if a color is cool", () => {
+        expect(Color.from("rgb(0, 0, 255)").isCool()).toBe(true);
+    });
+
+    it("should return true if a color is warm", () => {
+        expect(Color.from("rgb(255, 0, 0)").isWarm()).toBe(true);
+    });
+
+    it("should chain many methods", () => {
+        const color = Color.from("#FF5733").lighten(0.5).saturate(0.5).rotate(30).alpha(0.5);
+        expect(color.to("RGB")).toBe("rgba(255, 223, 153, 0.5)");
+    });
+
+    it("should return a random color", () => {
+        const randomColor = Color.random("named");
+        expect(Color.type(randomColor)).toBe("named");
+    });
 });
 
 describe("Color Patterns", () => {
