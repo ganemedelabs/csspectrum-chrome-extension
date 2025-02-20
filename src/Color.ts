@@ -273,6 +273,9 @@ const namedColors: { [named: string]: [number, number, number, number?] } = {
  * - `pattern` for matching the format,
  * - `parse` function to convert the format to RGBA,
  * - `format` function to convert RGBA back to the format.
+ *
+ * TODO:
+ * 1. LAB and LCH should have more decimal places (e.g, lch(51.2345% 21.2 130), lab(51.2345% -13.6271 16.2401))
  */
 const converters = (() => {
     const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
@@ -396,7 +399,9 @@ const converters = (() => {
                     throw new Error(`Invalid RGB(A) format: ${rgb}`);
                 }
 
-                const [r, g, b] = numbers.slice(0, 3).map((n) => parseFloat(n));
+                const convert = (n: string) => (n.includes("%") ? (parseFloat(n) / 100) * 255 : parseFloat(n));
+
+                const [r, g, b] = numbers.slice(0, 3).map(convert);
                 let a: number = numbers.length >= 4 ? parseFloat(numbers[3]) : 1;
 
                 if (numbers.length >= 4 && numbers[3].includes("%")) {
@@ -405,6 +410,7 @@ const converters = (() => {
 
                 return [r, g, b, a];
             },
+
             format: (rgba, options = { modern: false }) => {
                 const [r, g, b, a = 1] = rgba;
 
@@ -850,9 +856,9 @@ const converters = (() => {
                 const br = Math.round(bVal);
 
                 if (a === 1) {
-                    return `lab(${Lr} ${ar} ${br})`;
+                    return `lab(${Lr}% ${ar} ${br})`;
                 } else {
-                    return `lab(${Lr} ${ar} ${br} / ${a})`;
+                    return `lab(${Lr}% ${ar} ${br} / ${a})`;
                 }
             },
         },
@@ -1093,15 +1099,15 @@ const converters = (() => {
                 const aVal = 1.9779984953 * l_cbrt - 2.428592205 * m_cbrt + 0.4505937099 * s_cbrt;
                 const bVal = 0.0259040371 * l_cbrt + 0.7827717662 * m_cbrt - 0.808675766 * s_cbrt;
 
-                const Lpct = Math.round(L * 100) + "%";
+                const Lpct = Math.round(L * 100);
 
                 const aRounded = Math.round(aVal * 1000) / 1000;
                 const bRounded = Math.round(bVal * 1000) / 1000;
 
                 if (a === 1) {
-                    return `oklab(${Lpct} ${aRounded} ${bRounded})`;
+                    return `oklab(${Lpct}% ${aRounded} ${bRounded})`;
                 } else {
-                    return `oklab(${Lpct} ${aRounded} ${bRounded} / ${a})`;
+                    return `oklab(${Lpct}% ${aRounded} ${bRounded} / ${a})`;
                 }
             },
         },
@@ -1203,25 +1209,19 @@ const converters = (() => {
                 const Y = 0.2126729 * rLin + 0.7151522 * gLin + 0.072175 * bLin;
                 const Z = 0.0193339 * rLin + 0.119192 * gLin + 0.9503041 * bLin;
 
-                const X_D50 = X * 0.9555766 + Y * -0.0230393 + Z * 0.0631636;
-                const Y_D50 = X * -0.0282895 + Y * 1.0099416 + Z * 0.0210077;
-                const Z_D50 = X * 0.0122982 + Y * -0.020483 + Z * 1.3299098;
+                const l = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z;
+                const m = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z;
+                const s = 0.0482003018 * X + 0.2643662691 * Y + 0.633851707 * Z;
 
-                const l_ = Math.cbrt(
-                    0.8189330101 * (X_D50 * 100) + 0.3618667424 * (Y_D50 * 100) - 0.1288597137 * (Z_D50 * 100)
-                );
-                const m_ = Math.cbrt(
-                    0.0329845436 * (X_D50 * 100) + 0.9293118715 * (Y_D50 * 100) + 0.0361456387 * (Z_D50 * 100)
-                );
-                const s_ = Math.cbrt(
-                    0.0482003018 * (X_D50 * 100) + 0.2643662691 * (Y_D50 * 100) + 0.633851707 * (Z_D50 * 100)
-                );
+                const l_ = Math.cbrt(l);
+                const m_ = Math.cbrt(m);
+                const s_ = Math.cbrt(s);
 
                 const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
                 const a_lab = 1.9779984953 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
                 const b_lab = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
 
-                const L_out = Math.round(L * 100) + "%";
+                const L_out = Math.round(L * 100);
                 const C = Math.sqrt(a_lab * a_lab + b_lab * b_lab);
                 const hRad = Math.atan2(b_lab, a_lab);
                 let hDeg = hRad * (180 / Math.PI);
@@ -1231,9 +1231,9 @@ const converters = (() => {
                 const hstr = Math.round(hDeg * 1000) / 1000;
 
                 if (a === 1) {
-                    return `oklch(${L_out} ${Cstr} ${hstr})`;
+                    return `oklch(${L_out}% ${Cstr} ${hstr})`;
                 } else {
-                    return `oklch(${L_out} ${Cstr} ${hstr} / ${a})`;
+                    return `oklch(${L_out}% ${Cstr} ${hstr} / ${a})`;
                 }
             },
         },
@@ -1245,6 +1245,7 @@ const converters = (() => {
  *
  * @example
  * ```typescript
+ * // Convert a color from one format to another
  * Color.from("hsl(0 100% 50%)")to("RGB"); // "rgb(255 0 0)"
  * Color.from("#F00").to("HWB"); // "hwb(0 0% 0%)"
  * Color.from("lab(53.24% 80.09 67.2)").to("named"); // "red"
@@ -1254,6 +1255,7 @@ const converters = (() => {
  *
  * @example
  * ```typescript
+ * // Utility methods
  * Color.isValid("HSL", "hsl(0 100% 50%)"); // true
  * Color.from("red").isWarm(); // true
  * Color.from("#F00").getLuminance(); // 0.2126
@@ -1263,6 +1265,7 @@ const converters = (() => {
  *
  * @example
  * ```typescript
+ * // Chaining methods
  * const color = Color.from("#FF5733").lighten(0.5).saturate(0.5).rotate(30).alpha(0.5);
  * color.to("RGB"); // "rgba(255, 207, 102, 0.5)"
  * ```
@@ -1283,12 +1286,6 @@ class Color {
      * This property can be a string or undefined.
      */
     private name: string | undefined;
-
-    /**
-     * The index representing the current color format.
-     * This is used to track which color format is currently selected.
-     */
-    private currentFormatIndex: number = 0;
 
     constructor(rgba: RGBA) {
         this.rgba = rgba;
@@ -1399,7 +1396,8 @@ class Color {
      */
     static type(color: string) {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
-            if (pattern.test(color)) {
+            const anchoredPattern = new RegExp(`^${pattern.source}$`, pattern.flags);
+            if (anchoredPattern.test(color)) {
                 return key;
             }
         }
@@ -1491,43 +1489,50 @@ class Color {
      */
 
     /**
-     * Converts the current color to the specified format or cycles to the next format.
+     * Converts the current color to the specified format.
      *
-     * @param {string} format - The target format to convert the color to. If "next" is provided, the method will cycle to the next available format.
+     * @param {string} format - The target format to convert the color to.
      * @param {Record<string, unknown>} options - An optional object containing conversion options.
      * @returns {string | undefined} The color in the specified format.
      * @throws Will throw an error if the specified format is unsupported.
      */
-    to(format: keyof typeof converters | "next", options: { modern: boolean } = { modern: false }) {
-        if (format === "next") {
-            const patterns = Color.patterns;
-            let formats = Object.keys(patterns);
-
-            if (!this.name) {
-                formats = formats.filter((format) => format !== "named");
-            }
-
-            this.currentFormatIndex = (this.currentFormatIndex + 1) % formats.length;
-            const nextFormat = formats[this.currentFormatIndex];
-
-            let nextColor: string;
-
-            if (nextFormat === "named" && this.name) {
-                nextColor = this.name;
-            } else {
-                const methodName = `${nextFormat[0].toUpperCase()}${nextFormat.slice(1)}` as keyof typeof converters;
-                nextColor = this.to(methodName) as string;
-            }
-
-            return nextColor;
-        }
-
+    to(format: keyof typeof converters, options: FormattingOptions = { modern: false }) {
         const converter = converters[format];
         if (!converter)
             throw new Error(
                 `Unsupported color format: ${format}\nSupported formats: ${Object.keys(Color.patterns).join(", ")}`
             );
         return converter.format(this.rgba, { modern: options.modern });
+    }
+
+    /**
+     * Advances to the next color format based on the current index.
+     *
+     * @param {string} currentColorString -
+     * @returns {[string, number]} A tuple containing the next color as a string and the updated index.
+     */
+    toNextColor(currentColorString: string, options: FormattingOptions = { modern: false }) {
+        const patterns = Color.patterns;
+        let formats = Object.keys(patterns);
+
+        if (!this.name) {
+            formats = formats.filter((format) => format !== "named");
+        }
+
+        const type = Color.type(currentColorString);
+        const currentIndex = formats.lastIndexOf(type);
+
+        const nextFormat = formats[(currentIndex + 1) % formats.length];
+
+        let nextColor: string;
+
+        if (nextFormat === "named" && this.name) {
+            nextColor = this.name;
+        } else {
+            nextColor = this.to(nextFormat as keyof typeof converters, options) as string;
+        }
+
+        return nextColor;
     }
 
     /**
@@ -1731,41 +1736,45 @@ class Color {
         return this.to("RGB") === Color.from(color).to("RGB");
     }
 
+    /**
+     * Determines if the color is considered cool.
+     * A color is considered cool if its hue (H) in the HSL color space
+     * is between 60 degrees and 300 degrees.
+     *
+     * @returns {boolean} True if the color is cool, false otherwise.
+     */
     isCool() {
         const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
         return h > 60 && h < 300;
     }
 
+    /**
+     * Determines if the color is considered warm.
+     * A color is considered warm if its hue (H) in the HSL color space
+     * is less than or equal to 60 degrees or greater than or equal to 300 degrees.
+     *
+     * @returns {boolean} True if the color is warm, false otherwise.
+     */
     isWarm() {
         const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
         return h <= 60 || h >= 300;
     }
 
     /**
-     * Determines if the color is considered dark compared to a given background color.
+     * Determines if the given background color is considered dark.
      *
-     * @param {string} backgroundColor - The background color to compare against, in any supported format. Defaults to "rgb(255, 255, 255)".
-     * @returns {boolean} A boolean indicating whether the color is dark compared to the background color.
-     * @throws Will throw an error if the luminance of the color or the background color cannot be determined.
+     * @param {string} backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
+     * @returns {boolean} Whether the color is considered dark.
      */
     isDark(backgroundColor: string = "rgb(255, 255, 255)") {
-        const colorLuminance = this.getLuminance();
-        const backgroundColorLuminance = Color.from(backgroundColor).getLuminance();
-
-        if (colorLuminance === null || backgroundColorLuminance === null) {
-            throw new Error("Invalid color values provided.");
-        }
-
-        const [dark, light] = [colorLuminance, backgroundColorLuminance].sort((a, b) => a - b);
-        return light / dark > 1.6;
+        return this.getLuminance(backgroundColor) < 0.5;
     }
 
     /**
-     * Determines if the color is considered light compared to a given background color.
+     * Determines if the given background color is considered light.
      *
-     * @param {string} backgroundColor - The background color to compare against, in any supported format. Defaults to "rgb(255, 255, 255)".
-     * @returns {boolean} A boolean indicating whether the color is light compared to the background color.
-     * @throws Will throw an error if the luminance of the color or the background color cannot be determined.
+     * @param {string} backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
+     * @returns {boolean} Whether the color is considered light.
      */
     isLight(backgroundColor: string = "rgb(255, 255, 255)") {
         return !this.isDark(backgroundColor);
@@ -1774,23 +1783,32 @@ class Color {
     /**
      * Calculates the luminance of the color.
      *
-     * The luminance is computed using the formula defined by the WCAG guidelines:
-     * L = 0.2126 * R + 0.7152 * G + 0.0722 * B
-     * where R, G, and B are the linearized values of the red, green, and blue channels respectively.
-     *
-     * The linearization process involves transforming the sRGB values to a linear space.
-     *
-     * @returns {number} The luminance of the color, a value between 0 and 1.
+     * @param {string} backgroundColor - The background color to be used if the color has an alpha value less than 1. Defaults to "rgb(255, 255, 255)".
+     * @returns {number} The luminance value of the color, a number between 0 and 1.
      */
-    getLuminance() {
-        const [r, g, b] = this.rgba;
+    getLuminance(backgroundColor: string = "rgb(255, 255, 255)") {
+        const [r, g, b, a = 1] = this.rgba;
+
+        let effectiveR: number, effectiveG: number, effectiveB: number;
+        if (a < 1) {
+            const bgColor = Color.from(backgroundColor);
+            const [br, bg, bb] = bgColor.rgba;
+
+            effectiveR = r * a + br * (1 - a);
+            effectiveG = g * a + bg * (1 - a);
+            effectiveB = b * a + bb * (1 - a);
+        } else {
+            effectiveR = r;
+            effectiveG = g;
+            effectiveB = b;
+        }
 
         const transform = (channel: number) => {
             const c = channel / 255;
             return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
         };
 
-        return 0.2126 * transform(r) + 0.7152 * transform(g) + 0.0722 * transform(b);
+        return 0.2126 * transform(effectiveR) + 0.7152 * transform(effectiveG) + 0.0722 * transform(effectiveB);
     }
 }
 

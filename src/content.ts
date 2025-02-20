@@ -8,8 +8,9 @@ import Color from "./Color";
  * styles and attributes. The function also adds a click event listener to the `<mark>` elements to allow
  * cycling through different color representations.
  *
- * @param textNode - The text node to process and highlight color patterns within.
+ * @param {Text} textNode - The text node to process and highlight color patterns within.
  *
+ * @remarks
  * The function performs the following steps:
  * 1. Extracts the text content from the provided text node.
  * 2. Searches for color patterns within the text using regular expressions.
@@ -57,7 +58,12 @@ function processTextNode(textNode: Text, modern = false) {
         const colorString = matchText.trim();
         const bgColor = Color.from(colorString).to("RGB", { modern: false }) as string;
         const isNamedColor = colorPatterns.named.test(matchText);
-        const pageBgColor = window.getComputedStyle(document.body).backgroundColor;
+
+        const pageBgColor = (function () {
+            const bodyBgColor = window.getComputedStyle(document.body).backgroundColor;
+            if (Color.from(bodyBgColor).equals("transparent")) return "#fff";
+            return bodyBgColor;
+        })();
 
         wrapper.style.background = bgColor;
         wrapper.style.color = Color.from(bgColor).isDark(pageBgColor) ? "#fff" : "#000";
@@ -83,9 +89,9 @@ function processTextNode(textNode: Text, modern = false) {
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
 
             if (originalNamedColor) {
-                nextColor = Color.from(originalNamedColor).to("next", { modern });
+                nextColor = Color.from(originalNamedColor).toNextColor(wrapper.textContent as string, { modern });
             } else {
-                nextColor = Color.from(currentColor).to("next", { modern });
+                nextColor = Color.from(currentColor).toNextColor(wrapper.textContent as string, { modern });
             }
 
             wrapper.textContent = nextColor as string;
@@ -106,8 +112,8 @@ function processTextNode(textNode: Text, modern = false) {
  * Processes a DOM node recursively. If the node is a text node, it processes the text content.
  * If the node is an element node, it recursively processes its child nodes, excluding certain tags.
  *
- * @param node - The DOM node to process.
- * @returns A promise that resolves when the node and its children have been processed.
+ * @param {Node} node - The DOM node to process.
+ * @returns {Promise<void>} - A promise that resolves once the node and its children have been processed.
  */
 async function processNode(node: Node, modern: boolean): Promise<void> {
     if (node.nodeType === Node.TEXT_NODE) {
