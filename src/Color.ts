@@ -11,82 +11,12 @@
  * furnished to do so, subject to the following conditions:
  *
  * (Full text available in the LICENSE file)
- *
- * ========================================================
- *
- * MODIFICATION GUIDELINES:
- *
- * ────────────────────────────────────────────────────────
- * 1. Adding Named Colors
- * ────────────────────────────────────────────────────────
- *
- * Add the color name and RGBA values to the `namedColors` object
- *
- * Example:
- * ```typescript
- * const namedColors = {
- *     // ... existing colors
- *     neonpink: [255, 0, 255], // [R, G, B] or [R, G, B, A]
- *     transparentblack: [0, 0, 0, 0.5]
- * };
- * ```
- *
- * ────────────────────────────────────────────────────────
- * 2. Adding New Color Formats
- * ────────────────────────────────────────────────────────
- *
- * Add an object to the `converters` array with the following properties:
- *   - `pattern`: Regular expression for detecting the format
- *   - `parse`: Function that converts the color string to RGBA array
- *   - `format`: Function that converts the RGBA array to a color string
- *
- * Example: Adding "myFormat" support
- * ```typescript
- * const converters = {
- *     // ... existing converters
- *     myFormat: {
- *         pattern: /myformat\(([^)]+)\)/i,
- *         parse: (color) => {
- *             const [r, g, b] = color.split(",").map((v) => parseInt(v.trim()));
- *             return [r, g, b, 1];
- *         },
- *         format: (rgba) => {
- *             const [r, g, b] = rgba;
- *             return `myformat(${r}, ${g}, ${b})`;
- *         }
- *     }
- * };
- * ```
- *
- * ────────────────────────────────────────────────────────
- * 3. Adding Color Manipulation Methods
- * ────────────────────────────────────────────────────────
- *
- * Create a method that modifies `this.rgba` directly and returns `this`
- *
- * Example: Brightness adjustment method
- * ```typescript
- * class Color {
- *     adjustBrightness(amount: number) {
- *         this.rgba = this.rgba.map((v, i) =>
- *             i < 3 ? Math.min(255, Math.max(0, v + amount)) : v
- *         ) as RGBA;
- *         return this;
- *     }
- * }
- * ```
- *
- * ────────────────────────────────────────────────────────
- * ARCHITECTURAL NOTES
- * ────────────────────────────────────────────────────────
- * - RGBA array format: [0-255, 0-255, 0-255, 0-1]
- * - All conversions must normalize to RGBA
  */
 
 /**
- * Represents a color in the RGBA (Red, Green, Blue, Alpha) color space.
+ * Represents a color in the CIE 1931 XYZ color space with an optional alpha channel.
  */
-type RGBA = [number, number, number, number?];
+type XYZA = [number, number, number, number?];
 
 /**
  * Options for formatting output.
@@ -99,18 +29,168 @@ type FormattingOptions = {
 };
 
 /**
- * A type representing a collection of color converters.
- * Each converter is identified by a string key and contains:
- * - `pattern`: A regular expression to match the color format.
- * - `parse`: A function that takes a color string and returns an RGBA object.
- * - `format`: A function that takes an RGBA object and optional formatting options, and returns a formatted color string or undefined.
+ * Options for generating the next color in a sequence.
+ */
+type ToNextColorOptions = {
+    /**
+     * The colors to skip.
+     */
+    exclude?: Format[];
+};
+
+/**
+ * Interface representing a color converter with components.
+ */
+interface ConverterWithComponents {
+    /**
+     * Regular expression pattern to match the color string.
+     */
+    pattern: RegExp;
+
+    /**
+     * Object containing the components of the color.
+     * Each component is an object with the following properties:
+     * - `index`: The index of the component in the color array.
+     * - `min`: The minimum value of the component.
+     * - `max`: The maximum value of the component.
+     * - `loop` (optional): A boolean indicating if the component should loop.
+     */
+    components: {
+        [component: string]: { index: number; min: number; max: number; loop?: boolean };
+    };
+
+    /**
+     * Converts a color string to an array of component values.
+     *
+     * @param {string} colorString - The color string to convert.
+     * @returns {number[]} An array of component values.
+     */
+    toComponents: (colorString: string) => number[]; // eslint-disable-line no-unused-vars
+
+    /**
+     * Converts an array of component values to a color string.
+     *
+     * @param {number[]} colorArray - The array of component values to convert.
+     * @param {FormattingOptions} options - Optional formatting options.
+     * @returns {string} The color string.
+     */
+    fromComponents: (colorArray: number[], options?: FormattingOptions) => string; // eslint-disable-line no-unused-vars
+
+    /**
+     * Converts an array of component values to an XYZA color space.
+     *
+     * @param {number[]} colorArray - The array of component values to convert.
+     * @returns {XYZA} The XYZA color space representation.
+     */
+    toXYZA: (colorArray: number[]) => XYZA; // eslint-disable-line no-unused-vars
+
+    /**
+     * Converts an XYZA color space representation to an array of component values.
+     *
+     * @param {XYZA} xyza - The XYZA color space representation to convert.
+     * @returns {number[]} The array of component values.
+     */
+    fromXYZA: (xyza: XYZA) => number[]; // eslint-disable-line no-unused-vars
+}
+
+/**
+ * Interface representing a color converter without components.
+ */
+interface ConverterWithoutComponents {
+    /**
+     * Regular expression pattern to match the color string.
+     */
+    pattern: RegExp;
+
+    /**
+     * Converts a color string to an XYZA color space representation.
+     *
+     * @param {string} colorString - The color string to convert.
+     * @returns {XYZA} The XYZA color space representation.
+     */
+    toXYZA: (colorString: string) => XYZA; // eslint-disable-line no-unused-vars
+
+    /**
+     * Converts an XYZA color space representation to a color string.
+     *
+     * @param {XYZA} xyza - The XYZA color space representation to convert.
+     * @returns {string} The color string.
+     */
+    fromXYZA: (xyza: XYZA) => string; // eslint-disable-line no-unused-vars
+}
+
+/**
+ * Represents a collection of converters where the key is a string representing the type of converter,
+ * and the value is either a `ConverterWithComponents` or a `ConverterWithoutComponents`.
  */
 type Converters = {
-    [type: string]: {
-        pattern: RegExp;
-        parse: (color: string) => RGBA; // eslint-disable-line no-unused-vars
-        format: (rgba: RGBA, options?: FormattingOptions) => string | undefined; // eslint-disable-line no-unused-vars
-    };
+    [type: string]: ConverterWithComponents | ConverterWithoutComponents;
+};
+
+/**
+ * Represents the format type for color conversion.
+ */
+type Format = keyof typeof converters;
+
+/**
+ * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
+ * but only if the converter is of type `ConverterWithComponents`.
+ */
+type Space = {
+    [K in Format]: (typeof converters)[K] extends ConverterWithComponents ? K : never;
+}[Format];
+
+/**
+ * Extracts the names of the components from a type that has a `components` property.
+ * The `components` property is expected to be a record where the keys are the component names
+ * and the values are objects containing `index`, `min`, `max`, and optionally `loop` properties.
+ */
+type ComponentNames<T> = T extends {
+    components: Record<infer N, { index: number; min: number; max: number; loop?: boolean }>;
+}
+    ? N
+    : never;
+
+/**
+ * Represents a component type for a given color space.
+ *
+ * @template S - The color space type.
+ */
+type Component<S extends Space> = (typeof converters)[S] extends ConverterWithComponents
+    ? ComponentNames<(typeof converters)[S]>
+    : never;
+
+/**
+ * Represents operations that can be performed on a color in a specific color space.
+ *
+ * @template S - The color space type.
+ */
+type InSpace<S extends Space> = {
+    /**
+     * Retrieves the value of a specific component in the color space.
+     *
+     * @param {Component<S>} component - The component to retrieve the value for.
+     * @returns {number} The value of the specified component.
+     */
+    get: (component: Component<S>) => number; // eslint-disable-line no-unused-vars
+
+    /**
+     * Sets the value of a specific component in the color space.
+     *
+     * @param {Component<S>} component - The component to set the value for.
+     * @param {number} value - The new value for the component, or a function that takes the previous value and returns the new value.
+     * @returns {Color} The updated color.
+     */
+    set: (component: Component<S>, value: number | ((prev: number) => number)) => Color; // eslint-disable-line no-unused-vars
+
+    /**
+     * Mixes the current color with another color by a specified amount.
+     *
+     * @param {string} color - The color to mix with.
+     * @param {number} amount - The amount to mix the other color in, typically a value between 0 and 1.
+     * @returns  The resulting mixed color.
+     */
+    mixWith: (color: string, amount: number) => Color; // eslint-disable-line no-unused-vars
 };
 
 /**
@@ -268,14 +348,9 @@ const namedColors: { [named: string]: [number, number, number, number?] } = {
 };
 
 /**
- * An object containing various color format converters.
- * Each converter includes:
- * - `pattern` for matching the format,
- * - `parse` function to convert the format to RGBA,
- * - `format` function to convert RGBA back to the format.
- *
- * TODO:
- * 1. LAB and LCH should have more decimal places (e.g, lch(51.2345% 21.2 130), lab(51.2345% -13.6271 16.2401))
+ * A collection of color converters for various color formats.
+ * Each converter provides methods to convert to and from the XYZ color space,
+ * as well as methods to convert to and from component arrays.
  */
 const converters = (() => {
     const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
@@ -285,91 +360,42 @@ const converters = (() => {
     const alphaNum = "(?:0|1|0?\\.\\d+)";
     const alpha = `(?:(?:${alphaNum})|(?:${percentage}))`;
     const labComponent = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
-    const perc = percentage;
     const lchChroma = "(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
 
     return {
-        named: {
-            pattern: new RegExp(`\\b(${Object.keys(namedColors).join("|")})\\b`, "i"),
-            parse: (named) => {
-                const cleanedName = named.replace(/(?:\s+|-)/g, "").toLowerCase();
-                const rgb = namedColors[cleanedName];
-
-                if (!rgb) {
-                    throw new Error(`Invalid named color: ${named}`);
-                }
-
-                return [rgb[0], rgb[1], rgb[2], rgb[3] ?? 1];
+        XYZ: {
+            pattern: /color\(xyz\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/i,
+            components: {
+                x: { index: 0, min: 0, max: 0.9505 },
+                y: { index: 1, min: 0, max: 1 },
+                z: { index: 2, min: 0, max: 1.089 },
+                alpha: { index: 3, min: 0, max: 1 },
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                if (a !== 1) {
-                    return undefined;
+            toComponents: (xyz: string): number[] => {
+                const match = xyz.match(converters.XYZ.pattern) as RegExpMatchArray;
+                if (!match) {
+                    throw new Error(`Invalid XYZ color format: ${xyz}`);
                 }
+                const X = parseFloat(match[1]);
+                const Y = parseFloat(match[2]);
+                const Z = parseFloat(match[3]);
+                const A = match[4] != null ? parseFloat(match[4]) : 1;
 
-                for (const [name, rgb] of Object.entries(namedColors)) {
-                    if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
-                        return name;
-                    }
+                if (X < 0 || Y < 0 || Z < 0 || A < 0 || A > 1) {
+                    throw new Error(`XYZ values must be non-negative and alpha in [0, 1]: ${xyz}`);
                 }
-
-                return undefined;
+                return [X, Y, Z, A];
             },
-        },
-
-        HEX: {
-            pattern: /#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b/,
-            parse: (hex) => {
-                let hexStr = hex.trim();
-                if (hexStr.startsWith("#")) {
-                    hexStr = hexStr.slice(1);
-                }
-
-                let r: number,
-                    g: number,
-                    b: number,
-                    a = 1;
-
-                if (hexStr.length === 3) {
-                    r = parseInt(hexStr[0] + hexStr[0], 16);
-                    g = parseInt(hexStr[1] + hexStr[1], 16);
-                    b = parseInt(hexStr[2] + hexStr[2], 16);
-                } else if (hexStr.length === 6) {
-                    r = parseInt(hexStr.slice(0, 2), 16);
-                    g = parseInt(hexStr.slice(2, 4), 16);
-                    b = parseInt(hexStr.slice(4, 6), 16);
-                } else if (hexStr.length === 8) {
-                    r = parseInt(hexStr.slice(0, 2), 16);
-                    g = parseInt(hexStr.slice(2, 4), 16);
-                    b = parseInt(hexStr.slice(4, 6), 16);
-                    a = parseInt(hexStr.slice(6, 8), 16) / 255;
+            fromComponents: (xyzArray: number[], options?: FormattingOptions): string => {
+                const [X, Y, Z, A = 1] = xyzArray;
+                if (options?.modern) {
+                    return A === 1 ? `color(xyz ${X} ${Y} ${Z})` : `color(xyz ${X} ${Y} ${Z} / ${A})`;
                 } else {
-                    throw new Error(`Invalid HEX color format: ${hex}`);
-                }
-
-                return [r, g, b, a];
-            },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                const toHex = (x: number): string => {
-                    const hex = x.toString(16);
-                    return hex.length === 1 ? "0" + hex : hex;
-                };
-
-                const rHex = toHex(r);
-                const gHex = toHex(g);
-                const bHex = toHex(b);
-
-                if (a === 1 || a === undefined) {
-                    return `#${rHex}${gHex}${bHex}`.toUpperCase();
-                } else {
-                    const alphaInt = Math.round(a * 255);
-                    const aHex = toHex(alphaInt);
-                    return `#${rHex}${gHex}${bHex}${aHex}`.toUpperCase();
+                    return A === 1 ? `color(xyz ${X} ${Y} ${Z})` : `color(xyz ${X} ${Y} ${Z} / ${A})`;
                 }
             },
+            fromXYZA: (xyza: XYZA): number[] => xyza as number[],
+            toXYZA: (xyzArray: number[]): XYZA => xyzArray as XYZA,
         },
 
         RGB: {
@@ -393,28 +419,34 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (rgb) => {
-                const numbers = rgb.match(/[\d.]+%?/g);
-                if (!numbers || numbers.length < 3) {
-                    throw new Error(`Invalid RGB(A) format: ${rgb}`);
+            components: {
+                red: { index: 0, min: 0, max: 255 },
+                green: { index: 1, min: 0, max: 255 },
+                blue: { index: 2, min: 0, max: 255 },
+                alpha: { index: 3, min: 0, max: 1 },
+            },
+            toComponents: (rgb: string) => {
+                const convert = (value: string) =>
+                    value.includes("%") ? (parseFloat(value) / 100) * 255 : parseFloat(value);
+
+                const match = rgb.match(converters.RGB.pattern) as RegExpMatchArray;
+                if (!match) {
+                    throw new Error(`Invalid RGB color format: ${rgb}`);
                 }
+                const r = convert(match[1]);
+                const g = convert(match[2]);
+                const b = convert(match[3]);
+                const a =
+                    match[4] != null ? (match[4].includes("%") ? parseFloat(match[4]) / 100 : parseFloat(match[4])) : 1;
 
-                const convert = (n: string) => (n.includes("%") ? (parseFloat(n) / 100) * 255 : parseFloat(n));
-
-                const [r, g, b] = numbers.slice(0, 3).map(convert);
-                let a: number = numbers.length >= 4 ? parseFloat(numbers[3]) : 1;
-
-                if (numbers.length >= 4 && numbers[3].includes("%")) {
-                    a = parseFloat(numbers[3]) / 100;
+                if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 1) {
+                    throw new Error(`RGB values must be in [0, 255] and alpha in [0, 1]: ${rgb}`);
                 }
-
                 return [r, g, b, a];
             },
-
-            format: (rgba, options = { modern: false }) => {
-                const [r, g, b, a = 1] = rgba;
-
-                if (options.modern) {
+            fromComponents: (rgbArray: number[], options?: FormattingOptions) => {
+                const [r, g, b, a = 1] = rgbArray;
+                if (options?.modern) {
                     if (a === 1) {
                         return `rgb(${r} ${g} ${b})`;
                     } else {
@@ -422,15 +454,133 @@ const converters = (() => {
                         return `rgb(${r} ${g} ${b} / ${alphaPercentage}%)`;
                     }
                 } else {
-                    const rInt = Math.round(r);
-                    const gInt = Math.round(g);
-                    const bInt = Math.round(b);
-
                     if (a === 1) {
-                        return `rgb(${rInt}, ${gInt}, ${bInt})`;
+                        return `rgb(${r}, ${g}, ${b})`;
                     } else {
-                        return `rgba(${rInt}, ${gInt}, ${bInt}, ${a})`;
+                        return `rgba(${r}, ${g}, ${b}, ${a})`;
                     }
+                }
+            },
+            fromXYZA: (xyza) => {
+                const toSrgb = (value: number) => {
+                    const v = value <= 0.0031308 ? 12.92 * value : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
+                    return Math.round(Math.min(255, Math.max(0, v * 255)));
+                };
+
+                const [X, Y, Z, a = 1] = xyza;
+                const lr = 3.2406 * X - 1.5372 * Y - 0.4986 * Z;
+                const lg = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;
+                const lb = 0.0557 * X - 0.204 * Y + 1.057 * Z;
+                const r = toSrgb(lr);
+                const g = toSrgb(lg);
+                const b = toSrgb(lb);
+                return [r, g, b, a];
+            },
+            toXYZA: (rgbArray: number[]): XYZA => {
+                const toLinear = (value: number) => {
+                    const v = value / 255;
+                    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                };
+
+                const [r, g, b, a] = rgbArray;
+                const lr = toLinear(r);
+                const lg = toLinear(g);
+                const lb = toLinear(b);
+                const X = 0.4124 * lr + 0.3576 * lg + 0.1805 * lb;
+                const Y = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+                const Z = 0.0193 * lr + 0.1192 * lg + 0.9505 * lb;
+                return [X, Y, Z, a];
+            },
+        },
+
+        named: {
+            pattern: new RegExp(`\\b(${Object.keys(namedColors).join("|")})\\b`, "i"),
+            toXYZA: (named: string): XYZA => {
+                const cleanedName = named.replace(/(?:\s+|-)/g, "").toLowerCase();
+                const rgb = namedColors[cleanedName];
+
+                if (!rgb) {
+                    throw new Error(`Invalid named color: ${named}`);
+                }
+
+                return converters.RGB.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
+            },
+            fromXYZA: (xyza: XYZA): string => {
+                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
+
+                if (a === 1) {
+                    for (const [name, rgb] of Object.entries(namedColors)) {
+                        if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
+                            return name;
+                        }
+                    }
+                } else {
+                    for (const [name, rgb] of Object.entries(namedColors)) {
+                        if (r === rgb[0] && g === rgb[1] && b === rgb[2] && a === (rgb[3] ?? 1)) {
+                            return name;
+                        }
+                    }
+                }
+
+                throw new Error(`Invalid named color: ${xyza}`);
+            },
+        },
+
+        HEX: {
+            pattern: /#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b/,
+            toXYZA: (hex: string): XYZA => {
+                const match = hex.match(converters.HEX.pattern);
+                if (!match) {
+                    throw new Error(`Invalid HEX color format: ${hex}`);
+                }
+
+                const HEX = hex.slice(1);
+                let r: number = 0,
+                    g: number = 0,
+                    b: number = 0,
+                    a: number = 1;
+
+                if (HEX.length === 3) {
+                    r = parseInt(HEX[0] + HEX[0], 16);
+                    g = parseInt(HEX[1] + HEX[1], 16);
+                    b = parseInt(HEX[2] + HEX[2], 16);
+                } else if (HEX.length === 4) {
+                    r = parseInt(HEX[0] + HEX[0], 16);
+                    g = parseInt(HEX[1] + HEX[1], 16);
+                    b = parseInt(HEX[2] + HEX[2], 16);
+                    a = parseInt(HEX[3] + HEX[3], 16) / 255;
+                } else if (HEX.length === 6) {
+                    r = parseInt(HEX.slice(0, 2), 16);
+                    g = parseInt(HEX.slice(2, 4), 16);
+                    b = parseInt(HEX.slice(4, 6), 16);
+                } else if (HEX.length === 8) {
+                    r = parseInt(HEX.slice(0, 2), 16);
+                    g = parseInt(HEX.slice(2, 4), 16);
+                    b = parseInt(HEX.slice(4, 6), 16);
+                    a = parseInt(HEX.slice(6, 8), 16) / 255;
+                }
+
+                const rgbArray = converters.RGB.toComponents(`rgb(${r}, ${g}, ${b})`);
+                const [X, Y, Z] = converters.RGB.toXYZA(rgbArray);
+                return [X, Y, Z, a];
+            },
+            fromXYZA: (xyza: XYZA) => {
+                const [r, g, b, a] = converters.RGB.fromXYZA(xyza);
+
+                const toHex = (x: number) => {
+                    const hex = x.toString(16);
+                    return hex.length === 1 ? "0" + hex : hex;
+                };
+
+                const rHex = toHex(r);
+                const gHex = toHex(g);
+                const bHex = toHex(b);
+
+                if (a === 1) {
+                    return `#${rHex}${gHex}${bHex}`.toUpperCase();
+                } else {
+                    const aHex = toHex(Math.round(a * 255));
+                    return `#${rHex}${gHex}${bHex}${aHex}`.toUpperCase();
                 }
             },
         },
@@ -443,11 +593,11 @@ const converters = (() => {
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
                     "(" +
@@ -456,16 +606,22 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (hsl) => {
-                const inner = hsl
+            components: {
+                hue: { index: 0, min: 0, max: 360, loop: true },
+                saturation: { index: 1, min: 0, max: 100 },
+                lightness: { index: 2, min: 0, max: 100 },
+                alpha: { index: 3, min: 0, max: 1 },
+            },
+            toComponents: (hslStr) => {
+                const inner = hslStr
                     .replace(/^[^(]+\(/, "")
                     .replace(/\)$/, "")
                     .trim();
                 const partsBySlash = inner.split("/").map((p) => p.trim());
                 let alpha = 1;
-                let parts: string[];
+                let parts;
 
-                const parseAlpha = (alphaStr: string): number => {
+                const parseAlpha = (alphaStr: string) => {
                     alphaStr = alphaStr.trim().toLowerCase();
                     if (alphaStr === "none") return 1;
                     if (alphaStr.endsWith("%")) {
@@ -480,33 +636,79 @@ const converters = (() => {
                 } else {
                     parts = inner.split(/[\s,]+/);
                     if (parts.length === 4) {
-                        alpha = parseAlpha(parts.pop()!);
+                        alpha = parseAlpha(parts.pop() as string);
                     }
                 }
 
                 if (parts.length < 3) {
-                    throw new Error(`Invalid HSL(A) format: ${hsl}`);
+                    throw new Error(`Invalid HSL(A) format: ${hslStr}`);
                 }
 
                 const hStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
                 const hClean = hStr.replace(/deg$/i, "");
-                const h = parseFloat(hClean) / 360;
+                const h = parseFloat(hClean);
 
                 const sStr = parts[1].toLowerCase() === "none" ? "0" : parts[1];
-                const s = parseFloat(sStr.replace("%", "")) / 100;
+                const s = parseFloat(sStr.replace("%", ""));
 
                 const lStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-                const l = parseFloat(lStr.replace("%", "")) / 100;
+                const l = parseFloat(lStr.replace("%", ""));
 
-                const chroma = (1 - Math.abs(2 * l - 1)) * s;
-                const hPrime = h * 6;
+                return [h, s, l, alpha];
+            },
+            fromComponents: (hslArray, options = { modern: false }) => {
+                const [h, s, l, a = 1] = hslArray;
+                if (options.modern) {
+                    if (a === 1) {
+                        return `hsl(${h} ${s}% ${l}%)`;
+                    } else {
+                        const alphaPercentage = Math.round(a * 100);
+                        return `hsl(${h} ${s}% ${l}% / ${alphaPercentage}%)`;
+                    }
+                } else {
+                    if (a === 1) {
+                        return `hsl(${h}, ${s}%, ${l}%)`;
+                    } else {
+                        return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+                    }
+                }
+            },
+            fromXYZA: (xyza: XYZA): number[] => {
+                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
+                const rNorm = r / 255;
+                const gNorm = g / 255;
+                const bNorm = b / 255;
+                const max = Math.max(rNorm, gNorm, bNorm);
+                const min = Math.min(rNorm, gNorm, bNorm);
+                const chroma = max - min;
+                let hue = 0;
+                if (chroma !== 0) {
+                    if (max === rNorm) {
+                        hue = ((gNorm - bNorm) / chroma) % 6;
+                    } else if (max === gNorm) {
+                        hue = (bNorm - rNorm) / chroma + 2;
+                    } else {
+                        hue = (rNorm - gNorm) / chroma + 4;
+                    }
+                    hue *= 60;
+                    if (hue < 0) hue += 360;
+                }
+                const lightness = (max + min) / 2;
+                const saturation = lightness === 0 || lightness === 1 ? 0 : chroma / (1 - Math.abs(2 * lightness - 1));
+                return [Math.round(hue), Math.round(saturation * 100), Math.round(lightness * 100), a];
+            },
+            toXYZA: (hslArray: number[]): XYZA => {
+                const [h, s, l, a = 1] = hslArray;
+                const hNorm = h / 360;
+                const sNorm = s / 100;
+                const lNorm = l / 100;
+                const chroma = (1 - Math.abs(2 * lNorm - 1)) * sNorm;
+                const hPrime = hNorm * 6;
                 const x = chroma * (1 - Math.abs((hPrime % 2) - 1));
-
                 let r1 = 0,
                     g1 = 0,
                     b1 = 0;
                 const sector = Math.floor(hPrime) % 6;
-
                 /* eslint-disable indent */
                 switch (sector) {
                     case 0:
@@ -541,56 +743,11 @@ const converters = (() => {
                         break;
                 }
                 /* eslint-enable indent */
-
-                const m = l - chroma / 2;
-                const red = Math.round((r1 + m) * 255);
-                const green = Math.round((g1 + m) * 255);
-                const blue = Math.round((b1 + m) * 255);
-
-                return [red, green, blue, alpha];
-            },
-            format: (rgba, options = { modern: false }) => {
-                const [r, g, b, a = 1] = rgba;
-                const rNorm = r / 255;
-                const gNorm = g / 255;
-                const bNorm = b / 255;
-                const max = Math.max(rNorm, gNorm, bNorm);
-                const min = Math.min(rNorm, gNorm, bNorm);
-                const chroma = max - min;
-
-                let hue = 0;
-                if (chroma !== 0) {
-                    if (max === rNorm) {
-                        hue = ((gNorm - bNorm) / chroma) % 6;
-                    } else if (max === gNorm) {
-                        hue = (bNorm - rNorm) / chroma + 2;
-                    } else {
-                        hue = (rNorm - gNorm) / chroma + 4;
-                    }
-                    hue /= 6;
-                    if (hue < 0) hue += 1;
-                }
-                const lightness = (max + min) / 2;
-                const saturation = lightness === 0 || lightness === 1 ? 0 : chroma / (1 - Math.abs(2 * lightness - 1));
-
-                const h = Math.round(hue * 360);
-                const s = Math.round(saturation * 100);
-                const l = Math.round(lightness * 100);
-
-                if (options.modern) {
-                    if (a === 1) {
-                        return `hsl(${h} ${s}% ${l}%)`;
-                    } else {
-                        const alphaPercentage = Math.round(a * 100);
-                        return `hsl(${h} ${s}% ${l}% / ${alphaPercentage}%)`;
-                    }
-                } else {
-                    if (a === 1) {
-                        return `hsl(${h}, ${s}%, ${l}%)`;
-                    } else {
-                        return `hsla(${h}, ${s}%, ${l}%, ${a})`;
-                    }
-                }
+                const m = lNorm - chroma / 2;
+                const r = Math.round((r1 + m) * 255);
+                const g = Math.round((g1 + m) * 255);
+                const b = Math.round((b1 + m) * 255);
+                return converters.RGB.toXYZA([r, g, b, a]);
             },
         },
 
@@ -602,11 +759,11 @@ const converters = (() => {
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
                     "(" +
@@ -615,101 +772,64 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (hwb) => {
-                const inner = hwb
+            components: {
+                hue: { index: 0, min: 0, max: 360, loop: true },
+                whiteness: { index: 1, min: 0, max: 100 },
+                blackness: { index: 2, min: 0, max: 100 },
+                alpha: { index: 3, min: 0, max: 1 },
+            },
+            toComponents: (hwbStr) => {
+                const inner = hwbStr
                     .replace(/^[^(]+\(/, "")
                     .replace(/\)$/, "")
                     .trim();
                 const partsBySlash = inner.split("/").map((p) => p.trim());
                 let alpha = 1;
-                let parts: string[];
-
+                let parts;
                 if (partsBySlash.length === 2) {
                     alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
                     parts = partsBySlash[0].split(/[\s,]+/);
                 } else {
                     parts = inner.split(/[\s,]+/);
                     if (parts.length === 4) {
-                        const alphaStr = parts.pop()!;
+                        const alphaStr = parts.pop() as string;
                         alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
                     }
                 }
-
                 if (parts.length < 3) {
-                    throw new Error(`Invalid HWB(A) format: ${hwb}`);
+                    throw new Error(`Invalid HWB(A) format: ${hwbStr}`);
                 }
-
                 const hStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
                 const h = parseFloat(hStr);
-
                 const wStr = parts[1].toLowerCase() === "none" ? "0" : parts[1];
-                let w = parseFloat(wStr.replace("%", "")) / 100;
-
+                const w = parseFloat(wStr.replace("%", ""));
                 const blStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-                let bl = parseFloat(blStr.replace("%", "")) / 100;
-
-                const sum = w + bl;
-                if (sum > 1) {
-                    w /= sum;
-                    bl /= sum;
-                }
-                if (w + bl >= 1) {
-                    const gray = w / (w + bl);
-                    const c = Math.round(gray * 255);
-                    return [c, c, c, alpha];
-                }
-
-                let hue = h % 360;
-                if (hue < 0) hue += 360;
-                const hPrime = hue / 60;
-                const c = 1;
-                const x = c * (1 - Math.abs((hPrime % 2) - 1));
-                let r1 = 0,
-                    g1 = 0,
-                    b1 = 0;
-                if (hPrime >= 0 && hPrime < 1) {
-                    r1 = c;
-                    g1 = x;
-                    b1 = 0;
-                } else if (hPrime < 2) {
-                    r1 = x;
-                    g1 = c;
-                    b1 = 0;
-                } else if (hPrime < 3) {
-                    r1 = 0;
-                    g1 = c;
-                    b1 = x;
-                } else if (hPrime < 4) {
-                    r1 = 0;
-                    g1 = x;
-                    b1 = c;
-                } else if (hPrime < 5) {
-                    r1 = x;
-                    g1 = 0;
-                    b1 = c;
-                } else if (hPrime < 6) {
-                    r1 = c;
-                    g1 = 0;
-                    b1 = x;
-                }
-
-                const red = Math.round((r1 * (1 - w - bl) + w) * 255);
-                const green = Math.round((g1 * (1 - w - bl) + w) * 255);
-                const blue = Math.round((b1 * (1 - w - bl) + w) * 255);
-                return [red, green, blue, alpha];
+                const bl = parseFloat(blStr.replace("%", ""));
+                return [h, w, bl, alpha];
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
+            fromComponents: (hwbArray, options = { modern: false }) => {
+                const [h, w, bl, a = 1] = hwbArray;
+                if (options.modern) {
+                    if (a === 1) {
+                        return `hwb(${Math.round(h)} ${Math.round(w)}% ${Math.round(bl)}%)`;
+                    } else {
+                        return `hwb(${Math.round(h)} ${Math.round(w)}% ${Math.round(bl)}% / ${a})`;
+                    }
+                } else {
+                    if (a === 1) {
+                        return `hwb(${Math.round(h)}, ${Math.round(w)}%, ${Math.round(bl)}%)`;
+                    } else {
+                        return `hwb(${Math.round(h)}, ${Math.round(w)}%, ${Math.round(bl)}%, ${a})`;
+                    }
+                }
+            },
+            fromXYZA: (xyza: XYZA): number[] => {
+                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
                 const rNorm = r / 255;
                 const gNorm = g / 255;
                 const bNorm = b / 255;
-
                 const max = Math.max(rNorm, gNorm, bNorm);
                 const min = Math.min(rNorm, gNorm, bNorm);
-
-                const whiteness = min;
-                const blackness = 1 - max;
-
                 let hue = 0;
                 if (max !== min) {
                     if (max === rNorm) {
@@ -722,22 +842,66 @@ const converters = (() => {
                     hue = hue * 60;
                     if (hue < 0) hue += 360;
                 }
-
-                const w = Math.round(whiteness * 100);
-                const bl = Math.round(blackness * 100);
-                if (a === 1) {
-                    return `hwb(${Math.round(hue)} ${w}% ${bl}%)`;
-                } else {
-                    return `hwb(${Math.round(hue)} ${w}% ${bl}% / ${a})`;
+                const whiteness = min * 100;
+                const blackness = (1 - max) * 100;
+                return [Math.round(hue), Math.round(whiteness), Math.round(blackness), a];
+            },
+            toXYZA: (hwbArray: number[]): XYZA => {
+                const [h, w, bl, a = 1] = hwbArray;
+                const W = w / 100;
+                const Bl = bl / 100;
+                if (W + Bl >= 1) {
+                    const gray = W / (W + Bl);
+                    const c = Math.round(gray * 255);
+                    const rgbArray = converters.RGB.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
+                    return converters.RGB.toXYZA(rgbArray);
                 }
+                let hue = h % 360;
+                if (hue < 0) hue += 360;
+                const hPrime = hue / 60;
+                const C = 1;
+                const x = C * (1 - Math.abs((hPrime % 2) - 1));
+                let r1 = 0,
+                    g1 = 0,
+                    b1 = 0;
+                if (hPrime >= 0 && hPrime < 1) {
+                    r1 = C;
+                    g1 = x;
+                    b1 = 0;
+                } else if (hPrime < 2) {
+                    r1 = x;
+                    g1 = C;
+                    b1 = 0;
+                } else if (hPrime < 3) {
+                    r1 = 0;
+                    g1 = C;
+                    b1 = x;
+                } else if (hPrime < 4) {
+                    r1 = 0;
+                    g1 = x;
+                    b1 = C;
+                } else if (hPrime < 5) {
+                    r1 = x;
+                    g1 = 0;
+                    b1 = C;
+                } else if (hPrime < 6) {
+                    r1 = C;
+                    g1 = 0;
+                    b1 = x;
+                }
+                const red = Math.round((r1 * (1 - W - Bl) + W) * 255);
+                const green = Math.round((g1 * (1 - W - Bl) + W) * 255);
+                const blue = Math.round((b1 * (1 - W - Bl) + W) * 255);
+                const rgbArray = converters.RGB.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.RGB.toXYZA(rgbArray);
             },
         },
 
-        LAB: {
+        Lab: {
             pattern: new RegExp(
                 "lab\\(\\s*" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -754,111 +918,76 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (lab) => {
-                const inner = lab
-                    .replace(/^[^(]+\(/, "")
-                    .replace(/\)$/, "")
-                    .trim();
-                const partsBySlash = inner.split("/").map((p) => p.trim());
-                let alpha = 1;
-                let parts: string[];
-
-                if (partsBySlash.length === 2) {
-                    alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
-                    parts = partsBySlash[0].split(/[\s,]+/);
-                } else {
-                    parts = inner.split(/[\s,]+/);
-                    if (parts.length === 4) {
-                        const alphaStr = parts.pop()!;
-                        alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
-                    }
-                }
-
-                if (parts.length < 3) {
-                    throw new Error(`Invalid LAB(A) format: ${lab}`);
-                }
-
-                const LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
-                const aStr = parts[1].toLowerCase() === "none" ? "0" : parts[1];
-                const bStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-
-                const L = parseFloat(LStr);
-                const a = parseFloat(aStr);
-                const b = parseFloat(bStr);
-
-                const delta = 6 / 29;
-                const fInv = (t: number) => (t > delta ? t * t * t : 3 * delta * delta * (t - 4 / 29));
-                const fy = (L + 16) / 116;
-                const fx = a / 500 + fy;
-                const fz = fy - b / 200;
-                const Xn = 96.422;
-                const Yn = 100;
-                const Zn = 82.521;
-                const X = Xn * fInv(fx);
-                const Y = Yn * fInv(fy);
-                const Z = Zn * fInv(fz);
-
-                const rLin = 3.2406 * (X / 100) - 1.5372 * (Y / 100) - 0.4986 * (Z / 100);
-                const gLin = -0.9689 * (X / 100) + 1.8758 * (Y / 100) + 0.0415 * (Z / 100);
-                const bLin = 0.0557 * (X / 100) - 0.204 * (Y / 100) + 1.057 * (Z / 100);
-
-                const compand = (c: number) => {
-                    return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
-                };
-                let r = compand(rLin);
-                let g = compand(gLin);
-                let bVal = compand(bLin);
-
-                r = Math.min(Math.max(r, 0), 1);
-                g = Math.min(Math.max(g, 0), 1);
-                bVal = Math.min(Math.max(bVal, 0), 1);
-
-                return [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
+            components: {
+                lightness: { index: 0, min: 0, max: 100 },
+                a: { index: 1, min: -Infinity, max: Infinity },
+                b: { index: 2, min: -Infinity, max: Infinity },
+                alpha: { index: 3, min: 0, max: 1 },
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                const compInv = (c: number) => {
-                    c = c / 255;
-                    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            toComponents: (labStr: string): number[] => {
+                const match = labStr.match(converters.Lab.pattern);
+                if (!match) {
+                    throw new Error(`Invalid LAB color format: ${labStr}`);
+                }
+                const convertComponent = (value: string, isL = false) => {
+                    if (value === "none") return 0;
+                    if (value.includes("%")) {
+                        const percent = parseFloat(value) / 100;
+                        return isL ? percent * 100 : percent * 128;
+                    }
+                    return parseFloat(value);
                 };
-                const rLin = compInv(r);
-                const gLin = compInv(g);
-                const bLin = compInv(b);
-
-                const X = 0.4124564 * rLin + 0.3575761 * gLin + 0.1804375 * bLin;
-                const Y = 0.2126729 * rLin + 0.7151522 * gLin + 0.072175 * bLin;
-                const Z = 0.0193339 * rLin + 0.119192 * gLin + 0.9503041 * bLin;
-
-                const X_D50 = X * 0.9555766 + Y * -0.0230393 + Z * 0.0631636;
-                const Y_D50 = X * -0.0282895 + Y * 1.0099416 + Z * 0.0210077;
-                const Z_D50 = X * 0.0122982 + Y * -0.020483 + Z * 1.3299098;
-
-                const Xn = 96.422,
-                    Yn = 100,
-                    Zn = 82.521;
-                const xNorm = (X_D50 * 100) / Xn;
-                const yNorm = (Y_D50 * 100) / Yn;
-                const zNorm = (Z_D50 * 100) / Zn;
-
+                const L = convertComponent(match[1], true);
+                const A = convertComponent(match[2]);
+                const B = convertComponent(match[3]);
+                const alpha = match[4]
+                    ? match[4].includes("%")
+                        ? parseFloat(match[4]) / 100
+                        : parseFloat(match[4])
+                    : 1;
+                if (L < 0 || L > 100 || alpha < 0 || alpha > 1) {
+                    throw new Error(`LAB L must be in [0, 100] and alpha in [0, 1]: ${labStr}`);
+                }
+                return [L, A, B, alpha];
+            },
+            toXYZA: (labComponents: number[]): XYZA => {
+                const [L, A, B, alpha] = labComponents;
+                const Xn = 0.95047;
+                const Yn = 1.0;
+                const Zn = 1.08883;
                 const delta = 6 / 29;
-                const f = (t: number) =>
-                    t > Math.pow(delta, 3) ? Math.pow(t, 1 / 3) : t / (3 * delta * delta) + 4 / 29;
-                const fx = f(xNorm);
-                const fy = f(yNorm);
-                const fz = f(zNorm);
+                const f_inv = (t: number) => (t > delta ? Math.pow(t, 3) : 3 * delta * delta * (t - 4 / 29));
+                const fy = (L + 16) / 116;
+                const fx = fy + A / 500;
+                const fz = fy - B / 200;
+                const X = Xn * f_inv(fx);
+                const Y = Yn * f_inv(fy);
+                const Z = Zn * f_inv(fz);
+                return [X, Y, Z, alpha];
+            },
+            fromXYZA: (xyza) => {
+                const [X, Y, Z, alpha = 1] = xyza;
+                const Xn = 0.95047;
+                const Yn = 1.0;
+                const Zn = 1.08883;
+                const delta = 6 / 29;
+                const f = (t: number) => (t > Math.pow(delta, 3) ? Math.cbrt(t) : t / (3 * delta * delta) + 4 / 29);
+                const fx = f(X / Xn);
+                const fy = f(Y / Yn);
+                const fz = f(Z / Zn);
                 const L = 116 * fy - 16;
-                const aVal = 500 * (fx - fy);
-                const bVal = 200 * (fy - fz);
-
-                const Lr = Math.round(L);
-                const ar = Math.round(aVal);
-                const br = Math.round(bVal);
-
+                const A = 500 * (fx - fy);
+                const B = 200 * (fy - fz);
+                return [L, A, B, alpha];
+            },
+            fromComponents: (labArray) => {
+                const [L, A, B, a = 1] = labArray;
+                const precision = 2;
                 if (a === 1) {
-                    return `lab(${Lr}% ${ar} ${br})`;
+                    return `lab(${L.toFixed(precision)}% ${A.toFixed(precision)} ${B.toFixed(precision)})`;
                 } else {
-                    return `lab(${Lr}% ${ar} ${br} / ${a})`;
+                    const alphaPercentage = Math.round(a * 100);
+                    return `lab(${L.toFixed(precision)}% ${A.toFixed(precision)} ${B.toFixed(precision)} / ${alphaPercentage}%)`;
                 }
             },
         },
@@ -867,7 +996,7 @@ const converters = (() => {
             pattern: new RegExp(
                 "lch\\(\\s*" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -884,113 +1013,84 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (lch) => {
-                const inner = lch
-                    .replace(/^[^(]+\(/, "")
-                    .replace(/\)$/, "")
-                    .trim();
-                const partsBySlash = inner.split("/").map((p) => p.trim());
-                let alpha = 1;
-                let parts: string[];
-
-                if (partsBySlash.length === 2) {
-                    alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
-                    parts = partsBySlash[0].split(/[\s,]+/);
-                } else {
-                    parts = inner.split(/[\s,]+/);
-                    if (parts.length === 4) {
-                        const alphaStr = parts.pop()!;
-                        alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
-                    }
-                }
-
-                if (parts.length < 3) {
-                    throw new Error(`Invalid LCH(A) format: ${lch}`);
-                }
-
-                let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
-                if (LStr.includes("%")) {
-                    LStr = LStr.replace("%", "");
-                }
-                const L = parseFloat(LStr);
-                const C = parts[1].toLowerCase() === "none" ? 0 : parseFloat(parts[1]);
-                let hStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-                hStr = hStr.replace(/deg$/, "");
-                const h = parseFloat(hStr);
-
-                const a_lab = C * Math.cos((h * Math.PI) / 180);
-                const b_lab = C * Math.sin((h * Math.PI) / 180);
-
-                const Xn = 96.422,
-                    Yn = 100,
-                    Zn = 82.521;
-                const delta = 6 / 29;
-                const fy = (L + 16) / 116;
-                const fx = a_lab / 500 + fy;
-                const fz = fy - b_lab / 200;
-                const fInv = (t: number) => (t > delta ? Math.pow(t, 3) : 3 * delta * delta * (t - 4 / 29));
-                const X = Xn * fInv(fx);
-                const Y = Yn * fInv(fy);
-                const Z = Zn * fInv(fz);
-
-                const rLin = 3.2406 * (X / 100) - 1.5372 * (Y / 100) - 0.4986 * (Z / 100);
-                const gLin = -0.9689 * (X / 100) + 1.8758 * (Y / 100) + 0.0415 * (Z / 100);
-                const bLin = 0.0557 * (X / 100) - 0.204 * (Y / 100) + 1.057 * (Z / 100);
-
-                const compand = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
-                let r = compand(rLin);
-                let g = compand(gLin);
-                let bVal = compand(bLin);
-
-                r = Math.min(Math.max(r, 0), 1);
-                g = Math.min(Math.max(g, 0), 1);
-                bVal = Math.min(Math.max(bVal, 0), 1);
-
-                return [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
+            components: {
+                lightness: { index: 0, min: 0, max: 100 },
+                chroma: { index: 1, min: 0, max: 150 },
+                hue: { index: 2, min: 0, max: 360, loop: true },
+                alpha: { index: 3, min: 0, max: 1 },
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                const compInv = (c: number) => {
-                    c = c / 255;
-                    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            toComponents: (lchStr: string): number[] => {
+                const match = lchStr.match(converters.LCH.pattern);
+                if (!match) {
+                    throw new Error(`Invalid LCH color format: ${lchStr}`);
+                }
+                const convertComponent = (value: string, type: string) => {
+                    if (value === "none") return 0;
+                    if (value.includes("%")) {
+                        const percent = parseFloat(value) / 100;
+                        if (type === "L") return percent * 100;
+                        if (type === "C") return percent * 150;
+                        if (type === "H") return percent * 360;
+                    }
+                    return parseFloat(value);
                 };
-                const rLin = compInv(r);
-                const gLin = compInv(g);
-                const bLin = compInv(b);
-
-                const X = 0.4124564 * rLin + 0.3575761 * gLin + 0.1804375 * bLin;
-                const Y = 0.2126729 * rLin + 0.7151522 * gLin + 0.072175 * bLin;
-                const Z = 0.0193339 * rLin + 0.119192 * gLin + 0.9503041 * bLin;
-
-                const X_D50 = X * 0.9555766 + Y * -0.0230393 + Z * 0.0631636;
-                const Y_D50 = X * -0.0282895 + Y * 1.0099416 + Z * 0.0210077;
-                const Z_D50 = X * 0.0122982 + Y * -0.020483 + Z * 1.3299098;
-
-                const Xn = 96.422,
-                    Yn = 100,
-                    Zn = 82.521;
-                const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-                const fx = f((X_D50 * 100) / Xn);
-                const fy = f((Y_D50 * 100) / Yn);
-                const fz = f((Z_D50 * 100) / Zn);
+                const L = convertComponent(match[1], "L");
+                const C = convertComponent(match[2], "C");
+                const H = convertComponent(match[3], "H");
+                const alpha = match[4]
+                    ? match[4].includes("%")
+                        ? parseFloat(match[4]) / 100
+                        : parseFloat(match[4])
+                    : 1;
+                return [L, C, H, alpha];
+            },
+            toXYZA: (lchArray: number[]): XYZA => {
+                const [L, C, H, alpha = 1] = lchArray;
+                const H_rad = (H * Math.PI) / 180;
+                const A = C * Math.cos(H_rad);
+                const B = C * Math.sin(H_rad);
+                const Xn = 0.95047;
+                const Yn = 1.0;
+                const Zn = 1.08883;
+                const delta = 6 / 29;
+                const f_inv = (t: number) => (t > delta ? Math.pow(t, 3) : 3 * delta * delta * (t - 4 / 29));
+                const fy = (L + 16) / 116;
+                const fx = fy + A / 500;
+                const fz = fy - B / 200;
+                const X = Xn * f_inv(fx);
+                const Y = Yn * f_inv(fy);
+                const Z = Zn * f_inv(fz);
+                return [X, Y, Z, alpha];
+            },
+            fromXYZA: (xyza: XYZA): number[] => {
+                const [X, Y, Z, alpha = 1] = xyza;
+                const Xn = 0.95047;
+                const Yn = 1.0;
+                const Zn = 1.08883;
+                const delta = 6 / 29;
+                const f = (t: number) => (t > Math.pow(delta, 3) ? Math.cbrt(t) : t / (3 * delta * delta) + 4 / 29);
+                const x = X / Xn;
+                const y = Y / Yn;
+                const z = Z / Zn;
+                const fx = f(x);
+                const fy = f(y);
+                const fz = f(z);
                 const L = 116 * fy - 16;
-                const a_lab = 500 * (fx - fy);
-                const b_lab = 200 * (fy - fz);
-
-                const C = Math.sqrt(a_lab * a_lab + b_lab * b_lab);
-                const hRad = Math.atan2(b_lab, a_lab);
-                let hDeg = hRad * (180 / Math.PI);
-                if (hDeg < 0) hDeg += 360;
-
-                const Lstr = Math.round(L * 10) / 10;
-                const Cstr = Math.round(C * 10) / 10;
-                const hstr = Math.round(hDeg * 10) / 10;
-
+                const A = 500 * (fx - fy);
+                const B = 200 * (fy - fz);
+                const C = Math.sqrt(A * A + B * B);
+                let H = Math.atan2(B, A) * (180 / Math.PI);
+                if (H < 0) H += 360;
+                return [L, C, H, alpha];
+            },
+            fromComponents: (lchArray): string => {
+                const [L, C, H, a = 1] = lchArray;
+                const precision = 2;
                 if (a === 1) {
-                    return `lch(${Lstr}% ${Cstr} ${hstr})`;
+                    return `lch(${L.toFixed(precision)}% ${C.toFixed(precision)} ${H.toFixed(precision)})`;
                 } else {
-                    return `lch(${Lstr}% ${Cstr} ${hstr} / ${a})`;
+                    const alphaPercentage = Math.round(a * 100);
+                    return `lch(${L.toFixed(precision)}% ${C.toFixed(precision)} ${H.toFixed(precision)} / ${alphaPercentage}%)`;
                 }
             },
         },
@@ -999,7 +1099,7 @@ const converters = (() => {
             pattern: new RegExp(
                 "oklab\\(\\s*" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -1016,99 +1116,86 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (oklab) => {
-                const inner = oklab
-                    .replace(/^[^(]+\(/, "")
-                    .replace(/\)$/, "")
-                    .trim();
-
-                const partsBySlash = inner.split("/").map((p) => p.trim());
-                let alpha = 1;
-                let parts: string[];
-
-                if (partsBySlash.length === 2) {
-                    alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
-                    parts = partsBySlash[0].split(/[\s,]+/);
-                } else {
-                    parts = inner.split(/[\s,]+/);
-                    if (parts.length === 4) {
-                        const alphaStr = parts.pop()!;
-                        alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
-                    }
-                }
-
-                if (parts.length < 3) {
-                    throw new Error(`Invalid OKLAB(A) format: ${oklab}`);
-                }
-
-                let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
-                if (LStr.includes("%")) {
-                    LStr = (parseFloat(LStr) / 100).toString();
-                }
-                const aStr = parts[1].toLowerCase() === "none" ? "0" : parts[1];
-                const bStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-
-                const L = parseFloat(LStr);
-                const a = parseFloat(aStr);
-                const b = parseFloat(bStr);
-
-                const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
-                const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
-                const s_ = L - 0.0894841775 * a - 1.291485548 * b;
-
-                const l = Math.pow(l_, 3);
-                const m = Math.pow(m_, 3);
-                const s = Math.pow(s_, 3);
-
-                const rLin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-                const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-                const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
-
-                const compand = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
-
-                let r = compand(rLin);
-                let g = compand(gLin);
-                let bVal = compand(bLin);
-
-                r = Math.min(Math.max(r, 0), 1);
-                g = Math.min(Math.max(g, 0), 1);
-                bVal = Math.min(Math.max(bVal, 0), 1);
-
-                return [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
+            components: {
+                lightness: { index: 0, min: 0, max: 1 },
+                a: { index: 1, min: -Infinity, max: Infinity },
+                b: { index: 2, min: -Infinity, max: Infinity },
+                alpha: { index: 3, min: 0, max: 1 },
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                const compInv = (c: number) => {
-                    c = c / 255;
-                    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            toComponents: (oklabStr: string): number[] => {
+                const parseComponent = (value: string, name: string, isPercentage: boolean) => {
+                    if (value === "none") throw new Error(`'none' not supported for ${name}`);
+                    const num = parseFloat(value);
+                    if (isPercentage) {
+                        if (num < 0 || num > 100) throw new Error(`${name} must be 0-100%`);
+                        return num / 100;
+                    }
+                    return num;
                 };
-                const rLin = compInv(r);
-                const gLin = compInv(g);
-                const bLin = compInv(b);
 
-                const L_val = 0.412165612 * rLin + 0.536275208 * gLin + 0.0514575653 * bLin;
-                const M_val = 0.211859107 * rLin + 0.6807189584 * gLin + 0.107406579 * bLin;
-                const S_val = 0.0883097947 * rLin + 0.2818474174 * gLin + 0.6302613616 * bLin;
+                const match = oklabStr.match(converters.Oklab.pattern);
+                if (!match) throw new Error(`Invalid OKLab format: ${oklabStr}`);
 
-                const l_cbrt = Math.cbrt(L_val);
-                const m_cbrt = Math.cbrt(M_val);
-                const s_cbrt = Math.cbrt(S_val);
+                const L = parseComponent(match[1], "lightness", true);
+                const a = parseComponent(match[2], "a-component", false);
+                const b = parseComponent(match[3], "b-component", false);
+                const alpha = match[4]
+                    ? match[4].endsWith("%")
+                        ? parseFloat(match[4]) / 100
+                        : parseFloat(match[4])
+                    : 1;
 
-                const L = 0.2104542553 * l_cbrt + 0.793617785 * m_cbrt - 0.0040720468 * s_cbrt;
-                const aVal = 1.9779984953 * l_cbrt - 2.428592205 * m_cbrt + 0.4505937099 * s_cbrt;
-                const bVal = 0.0259040371 * l_cbrt + 0.7827717662 * m_cbrt - 0.808675766 * s_cbrt;
+                if (alpha < 0 || alpha > 1) throw new Error(`Alpha must be 0-1: ${match[4]}`);
 
-                const Lpct = Math.round(L * 100);
+                return [L, a, b, alpha];
+            },
+            toXYZA: (oklabArray: number[]): XYZA => {
+                const [L, a, b, alpha = 1] = oklabArray;
+                const l = L + 0.3963377774 * a + 0.2158037573 * b;
+                const m = L - 0.1055613458 * a - 0.0638541728 * b;
+                const s = L - 0.0894841775 * a - 1.291485548 * b;
 
-                const aRounded = Math.round(aVal * 1000) / 1000;
-                const bRounded = Math.round(bVal * 1000) / 1000;
+                const lLinear = l ** 3;
+                const mLinear = m ** 3;
+                const sLinear = s ** 3;
 
-                if (a === 1) {
-                    return `oklab(${Lpct}% ${aRounded} ${bRounded})`;
-                } else {
-                    return `oklab(${Lpct}% ${aRounded} ${bRounded} / ${a})`;
-                }
+                const X = 1.2270138511 * lLinear - 0.5577999807 * mLinear + 0.281256149 * sLinear;
+                const Y = -0.0405801784 * lLinear + 1.1122568696 * mLinear - 0.0716766787 * sLinear;
+                const Z = -0.0763812845 * lLinear - 0.4214819784 * mLinear + 1.5861632204 * sLinear;
+
+                return [X, Y, Z, alpha];
+            },
+            fromXYZA: (xyza: XYZA): number[] => {
+                const [X, Y, Z, alpha = 1] = xyza;
+
+                const lLinear = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z;
+                const mLinear = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z;
+                const sLinear = 0.0482003018 * X + 0.2643662691 * Y + 0.633851707 * Z;
+
+                const l = Math.cbrt(lLinear);
+                const m = Math.cbrt(mLinear);
+                const s = Math.cbrt(sLinear);
+
+                const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+                const labA = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+                const labB = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+
+                return [L, labA, labB, alpha];
+            },
+            fromComponents: (oklabArray: number[]): string => {
+                const [L, a, b, alpha = 1] = oklabArray;
+                const formatNumber = (n: number, decimals: number) => {
+                    const fixed = n.toFixed(decimals);
+                    return parseFloat(fixed).toString();
+                };
+
+                const formattedL = `${formatNumber(L * 100, 2)}%`;
+                const formattedA = formatNumber(a, 3);
+                const formattedB = formatNumber(b, 3);
+
+                return alpha === 1
+                    ? `oklab(${formattedL} ${formattedA} ${formattedB})`
+                    : `oklab(${formattedL} ${formattedA} ${formattedB} / ${Math.round(alpha * 100)}%)`;
             },
         },
 
@@ -1116,7 +1203,7 @@ const converters = (() => {
             pattern: new RegExp(
                 "oklch\\(\\s*" +
                     "(" +
-                    perc +
+                    percentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -1133,153 +1220,126 @@ const converters = (() => {
                     ")?\\s*\\)",
                 "i"
             ),
-            parse: (oklch) => {
-                const inner = oklch
-                    .replace(/^[^(]+\(/, "")
-                    .replace(/\)$/, "")
-                    .trim();
-
-                const partsBySlash = inner.split("/").map((p) => p.trim());
-                let alpha = 1;
-                let parts: string[];
-
-                if (partsBySlash.length === 2) {
-                    alpha = partsBySlash[1].toLowerCase() === "none" ? 1 : parseFloat(partsBySlash[1]);
-                    parts = partsBySlash[0].split(/[\s,]+/);
-                } else {
-                    parts = inner.split(/[\s,]+/);
-                    if (parts.length === 4) {
-                        const alphaStr = parts.pop()!;
-                        alpha = alphaStr.toLowerCase() === "none" ? 1 : parseFloat(alphaStr);
-                    }
-                }
-
-                if (parts.length < 3) {
-                    throw new Error(`Invalid OKLCH(A) format: ${oklch}`);
-                }
-
-                let LStr = parts[0].toLowerCase() === "none" ? "0" : parts[0];
-                if (LStr.includes("%")) {
-                    LStr = LStr.replace("%", "");
-                }
-                const L = parseFloat(LStr);
-                const C = parts[1].toLowerCase() === "none" ? 0 : parseFloat(parts[1]);
-                let hStr = parts[2].toLowerCase() === "none" ? "0" : parts[2];
-                hStr = hStr.replace(/deg$/, "");
-                const h = parseFloat(hStr);
-
-                const a_lab = C * Math.cos((h * Math.PI) / 180);
-                const b_lab = C * Math.sin((h * Math.PI) / 180);
-
-                const L_norm = L / 100;
-                const l_ = L_norm + 0.3963377774 * a_lab + 0.2158037573 * b_lab;
-                const m_ = L_norm - 0.1055613458 * a_lab - 0.0638541728 * b_lab;
-                const s_ = L_norm - 0.0894841775 * a_lab - 1.291485548 * b_lab;
-                const lCubed = Math.pow(l_, 3);
-                const mCubed = Math.pow(m_, 3);
-                const sCubed = Math.pow(s_, 3);
-
-                const rLin = 4.0767416621 * lCubed - 3.3077115913 * mCubed + 0.2309699292 * sCubed;
-                const gLin = -1.2684380046 * lCubed + 2.6097574011 * mCubed - 0.3413193965 * sCubed;
-                const bLin = -0.0041960863 * lCubed - 0.7034186147 * mCubed + 1.707614701 * sCubed;
-
-                const compand = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
-                let r = compand(rLin);
-                let g = compand(gLin);
-                let bVal = compand(bLin);
-
-                r = Math.min(Math.max(r, 0), 1);
-                g = Math.min(Math.max(g, 0), 1);
-                bVal = Math.min(Math.max(bVal, 0), 1);
-
-                return [Math.round(r * 255), Math.round(g * 255), Math.round(bVal * 255), alpha];
+            components: {
+                lightness: { index: 0, min: 0, max: 1 },
+                chrome: { index: 1, min: 0, max: Infinity },
+                hue: { index: 2, min: 0, max: 360, loop: true },
+                alpha: { index: 3, min: 0, max: 1 },
             },
-            format: (rgba) => {
-                const [r, g, b, a] = rgba;
-
-                const compInv = (c: number) => {
-                    c = c / 255;
-                    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            toComponents: (oklchStr: string): number[] => {
+                const parseComponent = (value: string, name: string, isPercentage: boolean) => {
+                    if (value === "none") throw new Error(`'none' not supported for ${name}`);
+                    const num = parseFloat(value);
+                    if (isPercentage) {
+                        if (num < 0 || num > 100) throw new Error(`${name} must be 0-100%`);
+                        return num / 100;
+                    }
+                    if (num < 0) throw new Error(`${name} must be non-negative`);
+                    return num;
                 };
-                const rLin = compInv(r);
-                const gLin = compInv(g);
-                const bLin = compInv(b);
 
-                const X = 0.4124564 * rLin + 0.3575761 * gLin + 0.1804375 * bLin;
-                const Y = 0.2126729 * rLin + 0.7151522 * gLin + 0.072175 * bLin;
-                const Z = 0.0193339 * rLin + 0.119192 * gLin + 0.9503041 * bLin;
+                const parseAngle = (value: string) => {
+                    const match = value.match(/^(-?\d*\.?\d+)(deg|rad|grad|turn)?$/);
+                    if (!match) throw new Error(`Invalid angle: ${value}`);
+                    let num = parseFloat(match[1]);
+                    /* eslint-disable indent */
+                    switch (match[2]) {
+                        case "rad":
+                            num *= 180 / Math.PI;
+                            break;
+                        case "grad":
+                            num *= 0.9;
+                            break;
+                        case "turn":
+                            num *= 360;
+                            break;
+                    }
+                    /* eslint-enable indent */
+                    return ((num % 360) + 360) % 360;
+                };
 
-                const l = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z;
-                const m = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z;
-                const s = 0.0482003018 * X + 0.2643662691 * Y + 0.633851707 * Z;
+                const match = oklchStr.match(converters.Oklch.pattern);
+                if (!match) throw new Error(`Invalid OKLCH format: ${oklchStr}`);
 
-                const l_ = Math.cbrt(l);
-                const m_ = Math.cbrt(m);
-                const s_ = Math.cbrt(s);
+                const L = parseComponent(match[1], "lightness", true);
+                const C = parseComponent(match[2], "chroma", false);
+                const h = parseAngle(match[3]);
+                const alpha = match[4]
+                    ? match[4].endsWith("%")
+                        ? parseFloat(match[4]) / 100
+                        : parseFloat(match[4])
+                    : 1;
 
-                const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
-                const a_lab = 1.9779984953 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
-                const b_lab = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+                if (alpha < 0 || alpha > 1) throw new Error(`Alpha must be 0-1: ${match[4]}`);
 
-                const L_out = Math.round(L * 100);
-                const C = Math.sqrt(a_lab * a_lab + b_lab * b_lab);
-                const hRad = Math.atan2(b_lab, a_lab);
-                let hDeg = hRad * (180 / Math.PI);
-                if (hDeg < 0) hDeg += 360;
+                return [L, C, h, alpha];
+            },
+            toXYZA: (oklchComponents: number[]): XYZA => {
+                const [L, C, h, alpha = 1] = oklchComponents;
+                const hRad = (h * Math.PI) / 180;
+                const aLab = C * Math.cos(hRad);
+                const bLab = C * Math.sin(hRad);
 
-                const Cstr = Math.round(C * 1000) / 1000;
-                const hstr = Math.round(hDeg * 1000) / 1000;
+                const l = L + 0.3963377774 * aLab + 0.2158037573 * bLab;
+                const m = L - 0.1055613458 * aLab - 0.0638541728 * bLab;
+                const s = L - 0.0894841775 * aLab - 1.291485548 * bLab;
 
-                if (a === 1) {
-                    return `oklch(${L_out}% ${Cstr} ${hstr})`;
-                } else {
-                    return `oklch(${L_out}% ${Cstr} ${hstr} / ${a})`;
-                }
+                const lLinear = l ** 3;
+                const mLinear = m ** 3;
+                const sLinear = s ** 3;
+
+                const X = 1.2270138511 * lLinear - 0.5577999807 * mLinear + 0.281256149 * sLinear;
+                const Y = -0.0405801784 * lLinear + 1.1122568696 * mLinear - 0.0716766787 * sLinear;
+                const Z = -0.0763812845 * lLinear - 0.4214819784 * mLinear + 1.5861632204 * sLinear;
+
+                return [X, Y, Z, alpha];
+            },
+            fromXYZA: (xyza: XYZA): number[] => {
+                const [X, Y, Z, alpha = 1] = xyza;
+
+                const lLinear = 0.8189330101 * X + 0.3618667424 * Y - 0.1288597137 * Z;
+                const mLinear = 0.0329845436 * X + 0.9293118715 * Y + 0.0361456387 * Z;
+                const sLinear = 0.0482003018 * X + 0.2643662691 * Y + 0.633851707 * Z;
+
+                const l = Math.cbrt(lLinear);
+                const m = Math.cbrt(mLinear);
+                const s = Math.cbrt(sLinear);
+
+                const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+                const aLab = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+                const bLab = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+
+                const C = Math.sqrt(aLab ** 2 + bLab ** 2);
+                let h = (Math.atan2(bLab, aLab) * 180) / Math.PI;
+                if (h < 0) h += 360;
+
+                return [L, C, h, alpha];
+            },
+            fromComponents: (oklchComponents: number[]): string => {
+                const [L, C, h, alpha = 1] = oklchComponents;
+                const formatNumber = (n: number, decimals: number) => parseFloat(n.toFixed(decimals)).toString();
+
+                const formattedL = `${formatNumber(L * 100, 2)}%`;
+                const formattedC = formatNumber(C, 3);
+                const formattedH = formatNumber(h, 1);
+
+                return alpha === 1
+                    ? `oklch(${formattedL} ${formattedC} ${formattedH})`
+                    : `oklch(${formattedL} ${formattedC} ${formattedH} / ${Math.round(alpha * 100)}%)`;
             },
         },
     };
 })() satisfies Converters;
 
 /**
- * The `Color` class represents a color in the RGBA format and provides various methods for color manipulation, conversion, and analysis.
+ * The `Color` class represents a dynamic CSS color object, allowing for the manipulation
+ * and retrieval of colors in various formats (e.g., RGB, HEX, HSL). This class provides
+ * methods to modify the color values, convert between formats, and interact with CSS properties.
  *
- * @example
- * ```typescript
- * // Convert a color from one format to another
- * Color.from("hsl(0 100% 50%)")to("RGB"); // "rgb(255 0 0)"
- * Color.from("#F00").to("HWB"); // "hwb(0 0% 0%)"
- * Color.from("lab(53.24% 80.09 67.2)").to("named"); // "red"
- * Color.from("rgb(255 0 0)").darken(0.5).to("HSL"); // "hsl(0 100% 25%)"
- * Color.from("hsl(0 100% 50%)").sepia().to("HEX"); // "#FFC299"
- * ```
- *
- * @example
- * ```typescript
- * // Utility methods
- * Color.isValid("HSL", "hsl(0 100% 50%)"); // true
- * Color.from("red").isWarm(); // true
- * Color.from("#F00").getLuminance(); // 0.2126
- * Color.type("lch(53.24% 80.09 67.2)"); // "LCH"
- * Color.isAccessiblePair("#000", "#FFF"); // true
- * ```
- *
- * @example
- * ```typescript
- * // Chaining methods
- * const color = Color.from("#FF5733").lighten(0.5).saturate(0.5).rotate(30).alpha(0.5);
- * color.to("RGB"); // "rgba(255, 207, 102, 0.5)"
- * ```
+ * @class
  */
 class Color {
-    /**
-     * Represents the RGBA color value.
-     * The array contains four elements:
-     * - Red component (0-255)
-     * - Green component (0-255)
-     * - Blue component (0-255)
-     * - Alpha component (0-1)
-     */
-    private _rgba: RGBA = [0, 0, 0, 1];
+    private _xyza: XYZA = [0, 0, 0, 1];
 
     /**
      * The name of the color.
@@ -1287,43 +1347,43 @@ class Color {
      */
     private name: string | undefined;
 
-    constructor(rgba: RGBA) {
-        this.rgba = rgba;
+    constructor(xyza: XYZA) {
+        this.xyza = xyza;
     }
 
     /**
-     * Gets the RGBA color value.
+     * Gets the XYZA color values.
      *
-     * @returns {string} The RGBA color value as a string.
+     * @returns A tuple containing the X, Y, Z, and A (alpha) color values.
+     *          If the alpha value is not defined, it defaults to 1.
      */
-    private get rgba() {
-        return this._rgba;
+    private get xyza(): [number, number, number, number] {
+        const [x, y, z, a = 1] = this._xyza;
+        return [x, y, z, a];
     }
 
     /**
-     * Sets the RGBA color value.
+     * Sets the XYZA color value and updates the corresponding RGB and color name.
      *
-     * @param {RGBA} newValue - An array containing the red, green, blue, and optional alpha values.
-     *                        - Red (r): A number between 0 and 255.
-     *                        - Green (g): A number between 0 and 255.
-     *                        - Blue (b): A number between 0 and 255.
-     *                        - Alpha (a): An optional number between 0 and 1. Defaults to 1 if not provided.
+     * @param newValue An array representing the XYZA color value. The array contains four elements:
+     *                   - x: The X component of the color.
+     *                   - y: The Y component of the color.
+     *                   - z: The Z component of the color.
+     *                   - a: The alpha (opacity) component of the color. Defaults to 1 if not provided.
      */
-    private set rgba(newValue: RGBA) {
-        const [r, g, b, a = 1] = newValue;
+    private set xyza(newValue: XYZA) {
+        const [x, y, z, a = 1] = newValue;
 
-        if (a === 1) {
-            for (const [name, rgb] of Object.entries(namedColors)) {
-                if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
-                    this.name = name;
-                    break;
-                }
+        const [r, g, b] = (converters.RGB.fromComponents([x, y, z, a]) as string).match(/\d+/g)!.map(Number);
+
+        for (const [name, rgb] of Object.entries(namedColors)) {
+            if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
+                this.name = name;
+                break;
             }
         }
 
-        this._rgba = [Math.min(Math.max(r, 0), 255), Math.min(Math.max(g, 0), 255), Math.min(Math.max(b, 0), 255), a];
-
-        this._rgba = newValue;
+        this._xyza = newValue;
     }
 
     /**
@@ -1336,9 +1396,9 @@ class Color {
      * A collection of regular expressions for parsing color strings.
      */
     // eslint-disable-next-line no-unused-vars
-    static patterns: { [K in keyof typeof converters]: RegExp } = Object.fromEntries(
+    static patterns: { [K in Format]: RegExp } = Object.fromEntries(
         Object.entries(converters).map(([key, value]) => [key, value.pattern])
-    ) as { [K in keyof typeof converters]: RegExp }; // eslint-disable-line no-unused-vars
+    ) as { [K in Format]: RegExp }; // eslint-disable-line no-unused-vars
 
     /**
      * ────────────────────────────────────────────────────────
@@ -1353,28 +1413,45 @@ class Color {
      */
 
     /**
-     * Creates a new `Color` instance from a given color string.
+     * Creates a new `Color` instance from a given color string and optional format.
      *
-     * @param {string} color - The color string to parse.
-     * @param {string} format - Optional. The format of the color string. Must be a key of the `converters` object.
-     *
-     * @returns {Color} A new `Color` instance representing the parsed color.
-     *
-     * @throws Will throw an error if the color string does not match the specified format.
-     * @throws Will throw an error if the color string does not match any supported format.
+     * @param {string} color - The color string to convert.
+     * @param {Format} format - The optional format of the color string. If provided, the function will use the corresponding converter.
+     * @returns {Color} A new `Color` instance.
      */
-    static from(color: string, format?: keyof typeof converters) {
+    static from(color: string, format?: Format) {
         if (format) {
-            const { parse, pattern } = converters[format];
-            if (pattern.test(color)) {
-                return new Color(parse(color));
+            const converter = converters[format];
+            if (!converter) {
+                throw new Error(
+                    `Unsupported color format: ${format}\nSupported formats: ${Object.keys(converters).join(", ")}`
+                );
             }
-            throw new Error(`Invalid ${format} color format: ${color}`);
+
+            if (!converter.pattern.test(color)) {
+                throw new Error(`Invalid ${format} color format: ${color}`);
+            }
+
+            let xyza: XYZA;
+            if ("toComponents" in converter) {
+                const components = converter.toComponents(color);
+                xyza = converter.toXYZA(components);
+            } else {
+                xyza = converter.toXYZA(color);
+            }
+            return new Color(xyza);
         }
 
-        for (const [, { pattern, parse }] of Object.entries(converters)) {
-            if (pattern.test(color)) {
-                return new Color(parse(color));
+        for (const [, converter] of Object.entries(converters)) {
+            if (converter.pattern.test(color)) {
+                let xyza: XYZA;
+                if ("toComponents" in converter) {
+                    const components = converter.toComponents(color);
+                    xyza = converter.toXYZA(components);
+                } else {
+                    xyza = converter.toXYZA(color);
+                }
+                return new Color(xyza);
             }
         }
 
@@ -1392,7 +1469,6 @@ class Color {
      *
      * @param {string} color - The color string to be evaluated.
      * @returns {string} The key corresponding to the matched color pattern.
-     * @throws Will throw an error if the color format is not recognized.
      */
     static type(color: string) {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
@@ -1456,7 +1532,7 @@ class Color {
      * @param {string} type - The target format for the random color.
      * @returns {string} A random color in the specified format.
      */
-    static random(type: keyof typeof converters) {
+    static random(type: Format) {
         if (type === "named") {
             return Object.keys(namedColors)[Math.floor(Math.random() * Object.keys(namedColors).length)];
         }
@@ -1472,7 +1548,7 @@ class Color {
      * @param {String} value - The string value to be validated.
      * @returns {boolean} Whether the value matches the pattern for the specified type.
      */
-    static isValid(type: keyof typeof converters, value: string) {
+    static isValid(type: Format, value: string) {
         return Color.patterns[type].test(value);
     }
 
@@ -1491,18 +1567,52 @@ class Color {
     /**
      * Converts the current color to the specified format.
      *
-     * @param {string} format - The target format to convert the color to.
-     * @param {Record<string, unknown>} options - An optional object containing conversion options.
-     * @returns {string | undefined} The color in the specified format.
-     * @throws Will throw an error if the specified format is unsupported.
+     * @param {Format} format - The target color format.
+     * @param {FormattingOptions} options - Optional formatting options. Defaults to `{ modern: false }`.
+     * @returns {string} The color in the specified format.
      */
-    to(format: keyof typeof converters, options: FormattingOptions = { modern: false }) {
+    to(format: Format, options: FormattingOptions = { modern: false }) {
         const converter = converters[format];
-        if (!converter)
+        if (!converter) {
             throw new Error(
-                `Unsupported color format: ${format}\nSupported formats: ${Object.keys(Color.patterns).join(", ")}`
+                `Unsupported color format: ${format}\nSupported formats: ${Object.keys(converters).join(", ")}`
             );
-        return converter.format(this.rgba, { modern: options.modern });
+        }
+
+        if ("fromComponents" in converter) {
+            const components = converter.fromXYZA(this.xyza);
+            const componentProps: Array<{ min: number; max: number; loop?: boolean }> = [];
+            for (const [, props] of Object.entries(converter.components)) {
+                componentProps[props.index] = props;
+            }
+
+            const adjustedComponents = components.map((value, i) => {
+                const props = componentProps[i];
+                if (!props) {
+                    throw new Error(`Missing component properties for index ${i}`);
+                }
+                if (props.loop) {
+                    const range = props.max - props.min;
+                    return props.min + ((((value - props.min) % range) + range) % range);
+                } else {
+                    return Math.min(props.max, Math.max(props.min, value));
+                }
+            });
+
+            return converter.fromComponents(adjustedComponents, options);
+        } else {
+            return converter.fromXYZA(this.xyza);
+        }
+    }
+
+    /**
+     * Converts the current color representation to an array in the specified format.
+     *
+     * @param {Format} format - The format to convert the color to.
+     * @returns {number[]} An array representing the color in the specified format.
+     */
+    toArray(space: Space) {
+        return converters[space].fromXYZA(this.xyza);
     }
 
     /**
@@ -1511,12 +1621,23 @@ class Color {
      * @param {string} currentColorString -
      * @returns {[string, number]} A tuple containing the next color as a string and the updated index.
      */
-    toNextColor(currentColorString: string, options: FormattingOptions = { modern: false }) {
+    toNextColor(
+        currentColorString: string,
+        options: FormattingOptions & ToNextColorOptions = { modern: false, exclude: [] }
+    ) {
         const patterns = Color.patterns;
         let formats = Object.keys(patterns);
 
+        if (options.exclude?.length) {
+            formats = formats.filter((format) => !options.exclude?.includes(format as Format));
+        }
+
         if (!this.name) {
             formats = formats.filter((format) => format !== "named");
+        }
+
+        if (formats.length === 0) {
+            throw new Error("No available formats after applying exclusions.");
         }
 
         const type = Color.type(currentColorString);
@@ -1529,7 +1650,7 @@ class Color {
         if (nextFormat === "named" && this.name) {
             nextColor = this.name;
         } else {
-            nextColor = this.to(nextFormat as keyof typeof converters, options) as string;
+            nextColor = this.to(nextFormat as Format, options) as string;
         }
 
         return nextColor;
@@ -1541,174 +1662,51 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
-    /**
-     * Lightne the color by a specified amount.
-     *
-     * @param {number} amount - A number between 0 and 1 representing the amount to lighten the color.
-     * @returns {Color} The current color object, with the lightened color values.
-     */
-    lighten(amount: number) {
-        if (amount > 1) amount = 1;
-        if (amount < 0) amount = 0;
+    in<S extends Space>(space: S): InSpace<S> {
+        const converter = converters[space];
 
-        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
-        return Color.from(`hsl(${h} ${s}% ${l + (100 - l) * amount}% ${a})`);
-    }
+        if (!("components" in converter)) {
+            throw new Error(`Space ${space} does not have defined components.`);
+        }
 
-    /**
-     * Darkens the color by a specified amount.
-     *
-     * @param {number} amount - A number between 0 and 1 representing the amount to darken the color.
-     * @returns {Color} The current color object, with the darkened color values.
-     */
-    darken(amount: number) {
-        if (amount > 1) amount = 1;
-        if (amount < 0) amount = 0;
+        const get = (component: Component<S>) => {
+            const colorArray = converter.fromXYZA(this.xyza);
+            return colorArray[converter.components[component as keyof typeof converter.components].index];
+        };
 
-        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
-        return Color.from(`hsl(${h} ${s}% ${l - l * amount}% ${a})`);
-    }
+        // eslint-disable-next-line no-unused-vars
+        const set = (component: Component<S>, value: number | ((prev: number) => number)) => {
+            const colorArray = converter.fromXYZA(this.xyza);
+            const index = converter.components[component as keyof typeof converter.components].index;
+            const currentValue = colorArray[index];
+            const newValue = typeof value === "function" ? value(currentValue) : value;
+            colorArray[index] = newValue;
+            this.xyza = converter.toXYZA(colorArray);
+            return this;
+        };
 
-    /**
-     * Saturates the color by a sepcified amount.
-     *
-     * @param {number} amount - The amount to saturate the color, between 0 and 1.
-     * @returns {Color} The current color object, with the new saturation value.
-     */
-    saturate(amount: number) {
-        if (amount > 1) amount = 1;
-        if (amount < 0) amount = 0;
+        const mixWith = (color: string, amount: number) => {
+            const t = Math.max(0, Math.min(amount, 1));
 
-        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
-        return Color.from(`hsl(${h} ${s + (100 - s) * amount}% ${l}% ${a})`);
-    }
+            const otherColor = Color.from(color);
+            const otherInterface = otherColor.in(space);
+            const components = converter.components;
 
-    /**
-     * Desaturates the color by a sepcified amount.
-     *
-     * @param {number} amount - The amount to desaturate the color, between 0 and 1.
-     * @returns {Color} The current color object, with the desaturated color values.
-     */
-    desaturate(amount: number) {
-        if (amount > 1) amount = 1;
-        if (amount < 0) amount = 0;
+            for (const component in components) {
+                if (Object.prototype.hasOwnProperty.call(components, component)) {
+                    const comp = component as Component<S>;
+                    const currentValue = get(comp);
+                    const otherValue = otherInterface.get(comp);
 
-        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
-        return Color.from(`hsl(${h} ${s - s * amount}% ${l}% ${a})`);
-    }
+                    const mixedValue = currentValue * (1 - t) + otherValue * t;
+                    set(comp, mixedValue);
+                }
+            }
 
-    /**
-     * Rotates the hue of the color by a specified amount.
-     *
-     * @param {number} amount - The amount to rotate the hue by, in degrees.
-     * @returns {Color} The current color object, with the rotated hue.
-     */
-    rotate(amount: number) {
-        const [h, s, l, a = 1] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
-        return Color.from(`hsl(${(Number(h) + amount + 360) % 360}, ${s}%, ${l}%, ${a})`);
-    }
+            return this;
+        };
 
-    /**
-     * Inverts the current color by subtracting each RGB component from 255.
-     *
-     * @returns {Color} The current color object, with the inverted color values.
-     */
-    invert() {
-        const [r, g, b, a] = this.rgba;
-        this.rgba = [255 - r, 255 - g, 255 - b, a];
-        return this;
-    }
-
-    /**
-     * Converts the current color to grayscale by averaging the red, green, and blue components.
-     *
-     * @returns {Color} The current color object, with the grayscale filter applied.
-     */
-    grayscale() {
-        const [r, g, b, a] = this.rgba;
-        const avg = (r + g + b) / 3;
-        this.rgba = [avg, avg, avg, a];
-        return this;
-    }
-
-    /**
-     * Applies a sepia filter to the current color.
-     *
-     * @returns {Color} The current color object, with the sepia filter applied.
-     */
-    sepia() {
-        const [r, g, b, a] = this.rgba;
-        const avg = (r + g + b) / 3;
-        this.rgba = [Math.min(255, avg + 100), Math.min(255, avg + 50), Math.min(255, avg), a];
-        return this;
-    }
-
-    /**
-     * Sets the alpha (opacity) value of the color.
-     *
-     * @param {number} amount - The alpha value to set, ranging from 0 (fully transparent) to 1 (fully opaque).
-     * @returns {Color} The current color object, with the new alpha value.
-     */
-    alpha(amount: number) {
-        this.rgba = [this.rgba[0], this.rgba[1], this.rgba[2], amount];
-        return this;
-    }
-
-    /**
-     * Sets the red component of the color.
-     *
-     * @param {number} amount - The value to set the red component to.
-     * @returns {Color} The current color object, with the new red component value.
-     */
-    red(amount: number) {
-        this.rgba = [amount, this.rgba[1], this.rgba[2], this.rgba[3]];
-        return this;
-    }
-
-    /**
-     * Sets the green component of the color.
-     *
-     * @param {number} amount - The value to set the green component to.
-     * @returns {Color} The current color object, with the new green component value.
-     */
-    green(amount: number) {
-        this.rgba = [this.rgba[0], amount, this.rgba[2], this.rgba[3]];
-        return this;
-    }
-
-    /**
-     * Sets the blue component of the color.
-     *
-     * @param {number} amount - The value to set the blue component to.
-     * @returns {Color} The current color object, with the new blue component value.
-     */
-    blue(amount: number) {
-        this.rgba = [this.rgba[0], this.rgba[1], amount, this.rgba[3]];
-        return this;
-    }
-
-    /**
-     * Mixes the current color with another color by a specified amount.
-     *
-     * @param {string} color - The color to mix with, represented as a string.
-     * @param {number} amount - The amount to mix the other color with, ranging from 0 to 1.
-     *                  A value of 0 will result in the original color, while a value of 1 will result in the other color.
-     * @returns {Color} The current color object, with the new mixed color values.
-     */
-    mixWith(color: string, amount: number) {
-        const other = Color.from(color);
-        const [r1, g1, b1, a1 = 1] = this.rgba;
-
-        const match = (other.to("RGB") as string).match(/\d+/g);
-        const [r2, g2, b2, a2 = 1] = match?.map(Number) as number[];
-
-        this.rgba = [
-            r1 + (r2 - r1) * amount,
-            g1 + (g2 - g1) * amount,
-            b1 + (b2 - b1) * amount,
-            (a1 ?? 1) + ((a2 ?? 1) - (a1 ?? 1)) * amount,
-        ];
-        return this;
+        return { get, set, mixWith };
     }
 
     /**
@@ -1723,7 +1721,7 @@ class Color {
      * @returns {Color} A new Color instance with identical RGBA values.
      */
     clone() {
-        return new Color(this.rgba);
+        return new Color(this.xyza);
     }
 
     /**
@@ -1733,7 +1731,7 @@ class Color {
      * @returns {boolean} Whether the two colors are equal.
      */
     equals(color: string) {
-        return this.to("RGB") === Color.from(color).to("RGB");
+        return this.to("XYZ") === Color.from(color).to("XYZ");
     }
 
     /**
@@ -1783,32 +1781,20 @@ class Color {
     /**
      * Calculates the luminance of the color.
      *
-     * @param {string} backgroundColor - The background color to be used if the color has an alpha value less than 1. Defaults to "rgb(255, 255, 255)".
+     * @param {string} backgroundColor - The background color used if the color is not fully opaque. Defaults to white ("rgb(255, 255, 255)").
      * @returns {number} The luminance value of the color, a number between 0 and 1.
      */
     getLuminance(backgroundColor: string = "rgb(255, 255, 255)") {
-        const [r, g, b, a = 1] = this.rgba;
+        const [, Y, , alpha] = this.toArray("XYZ");
 
-        let effectiveR: number, effectiveG: number, effectiveB: number;
-        if (a < 1) {
-            const bgColor = Color.from(backgroundColor);
-            const [br, bg, bb] = bgColor.rgba;
-
-            effectiveR = r * a + br * (1 - a);
-            effectiveG = g * a + bg * (1 - a);
-            effectiveB = b * a + bb * (1 - a);
-        } else {
-            effectiveR = r;
-            effectiveG = g;
-            effectiveB = b;
+        if (alpha === 1) {
+            return Y;
         }
 
-        const transform = (channel: number) => {
-            const c = channel / 255;
-            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-        };
+        const bgXYZ = Color.from(backgroundColor).toArray("XYZ");
+        const blendedY = (1 - alpha) * bgXYZ[1] + alpha * Y;
 
-        return 0.2126 * transform(effectiveR) + 0.7152 * transform(effectiveG) + 0.0722 * transform(effectiveB);
+        return blendedY;
     }
 }
 
