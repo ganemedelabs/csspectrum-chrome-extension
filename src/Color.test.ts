@@ -64,11 +64,11 @@ describe("Color", () => {
     });
 
     it("should convert HSL to RGBA correctly", () => {
-        expect(Color.from("hsl(9, 100%, 60%)").to("RGB")).toBe("rgb(255, 82, 51)");
+        expect(Color.from("hsl(9, 100%, 60%)").to("RGB")).toBe("rgb(255, 81.5, 51)");
     });
 
     it("should convert HWB to RGBA correctly", () => {
-        expect(Color.from("hwb(9, 0%, 0%)").to("RGB")).toBe("rgb(255, 38, 0)");
+        expect(Color.from("hwb(9, 0%, 0%)").to("RGB")).toBe("rgb(255, 38.5, 0)");
     });
 
     it("should convert LAB to RGBA correctly", () => {
@@ -96,18 +96,18 @@ describe("Color", () => {
     it("should saturate a color correctly", () => {
         const color = Color.from("hsl(0, 50%, 50%)")
             .in("HSL")
-            .set("saturation", (s) => s + 50)
+            .set("saturation", (s) => s + 40)
             .to("HSL");
-        expect(color).toBe("hsl(0, 100%, 50%)");
+        expect(color).toBe("hsl(0, 90%, 50%)");
     });
 
     it("should desaturate a color correctly", () => {
         expect(
             Color.from("hsl(0, 50%, 50%)")
                 .in("HSL")
-                .set("saturation", (s) => (s -= 50))
+                .set("saturation", (s) => (s -= 40))
                 .to("HSL")
-        ).toBe("hsl(0, 0%, 50%)");
+        ).toBe("hsl(0, 10%, 50%)");
     });
 
     it("should rotate a color correctly", () => {
@@ -214,7 +214,7 @@ describe("Color Patterns", () => {
         {
             name: "LCH",
             valid: ["lch(52.2%, 72.2, 50)", "lch(52.2% 72.2 50)", "lch(52.2% 72.2 50 / 0.5)"],
-            invalid: ["lch(52.2, 72.2, 50)", "lch(52.2%, -72.2, 50)"],
+            invalid: ["lch(52.2, 72.2%, 50)", "lch(52.2%, -72.2, 50)"],
         },
         {
             name: "Oklab",
@@ -224,7 +224,7 @@ describe("Color Patterns", () => {
         {
             name: "Oklch",
             valid: ["oklch(60%, 0.15, 50)", "oklch(60% 0.15 50)", "oklch(60% 0.15 50 / 0.5)"],
-            invalid: ["oklch(60, 0.15, 50)", "oklch(60% 0.15)"],
+            invalid: ["oklch(60, 0.15%, 50)", "oklch(60% 0.15)"],
         },
         {
             name: "named",

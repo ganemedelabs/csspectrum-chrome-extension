@@ -21,11 +21,18 @@ type XYZA = [number, number, number, number?];
 /**
  * Options for formatting output.
  */
+/**
+ * Options for formatting color values.
+ */
 type FormattingOptions = {
     /**
      * Use modern color format for RGB and HSL (e.g., `rgb(255 0 0)` instead of `rgb(255, 0, 0)`, or `hsb(0 100% 50%)` instead of `hsb(0, 100%, 50%)`).
      */
     modern?: boolean;
+    /**
+     * Allow decimal places in the output formats.
+     */
+    precise?: boolean;
 };
 
 /**
@@ -54,9 +61,10 @@ interface ConverterWithComponents {
      * - `min`: The minimum value of the component.
      * - `max`: The maximum value of the component.
      * - `loop` (optional): A boolean indicating if the component should loop.
+     * - `step` (optional): A number indicating the decimal places to be used for the output format.
      */
     components: {
-        [component: string]: { index: number; min: number; max: number; loop?: boolean };
+        [component: string]: { index: number; min: number; max: number; loop?: boolean; step?: number };
     };
 
     /**
@@ -146,7 +154,7 @@ type Space = {
  * and the values are objects containing `index`, `min`, `max`, and optionally `loop` properties.
  */
 type ComponentNames<T> = T extends {
-    components: Record<infer N, { index: number; min: number; max: number; loop?: boolean }>;
+    components: Record<infer N, { index: number; min: number; max: number; loop?: boolean; step: number }>;
 }
     ? N
     : never;
@@ -361,15 +369,16 @@ const converters = (() => {
     const alpha = `(?:(?:${alphaNum})|(?:${percentage}))`;
     const labComponent = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
     const lchChroma = "(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
+    const lchPercentage = percentage + "|" + labComponent;
 
     return {
         XYZ: {
             pattern: /color\(xyz\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/i,
             components: {
-                x: { index: 0, min: 0, max: 0.9505 },
-                y: { index: 1, min: 0, max: 1 },
-                z: { index: 2, min: 0, max: 1.089 },
-                alpha: { index: 3, min: 0, max: 1 },
+                x: { index: 0, min: 0, max: 0.9505, step: 0.00001 },
+                y: { index: 1, min: 0, max: 1, step: 0.00001 },
+                z: { index: 2, min: 0, max: 1.089, step: 0.00001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
             toComponents: (xyz: string): number[] => {
                 const match = xyz.match(converters.XYZ.pattern) as RegExpMatchArray;
@@ -420,10 +429,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                red: { index: 0, min: 0, max: 255 },
-                green: { index: 1, min: 0, max: 255 },
-                blue: { index: 2, min: 0, max: 255 },
-                alpha: { index: 3, min: 0, max: 1 },
+                red: { index: 0, min: 0, max: 255, step: 0.5 },
+                green: { index: 1, min: 0, max: 255, step: 0.5 },
+                blue: { index: 2, min: 0, max: 255, step: 0.5 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (rgb: string) => {
                 const convert = (value: string) =>
@@ -464,7 +473,7 @@ const converters = (() => {
             fromXYZA: (xyza) => {
                 const toSrgb = (value: number) => {
                     const v = value <= 0.0031308 ? 12.92 * value : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
-                    return Math.round(Math.min(255, Math.max(0, v * 255)));
+                    return v * 255;
                 };
 
                 const [X, Y, Z, a = 1] = xyza;
@@ -506,7 +515,7 @@ const converters = (() => {
                 return converters.RGB.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
             },
             fromXYZA: (xyza: XYZA): string => {
-                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
+                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza).map((n) => Math.round(n));
 
                 if (a === 1) {
                     for (const [name, rgb] of Object.entries(namedColors)) {
@@ -565,7 +574,7 @@ const converters = (() => {
                 return [X, Y, Z, a];
             },
             fromXYZA: (xyza: XYZA) => {
-                const [r, g, b, a] = converters.RGB.fromXYZA(xyza);
+                const [r, g, b, a] = converters.RGB.fromXYZA(xyza).map((n) => Math.round(n));
 
                 const toHex = (x: number) => {
                     const hex = x.toString(16);
@@ -607,10 +616,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                hue: { index: 0, min: 0, max: 360, loop: true },
-                saturation: { index: 1, min: 0, max: 100 },
-                lightness: { index: 2, min: 0, max: 100 },
-                alpha: { index: 3, min: 0, max: 1 },
+                hue: { index: 0, min: 0, max: 360, loop: true, step: 0.01 },
+                saturation: { index: 1, min: 0, max: 100, step: 0.01 },
+                lightness: { index: 2, min: 0, max: 100, step: 0.01 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (hslStr) => {
                 const inner = hslStr
@@ -709,6 +718,7 @@ const converters = (() => {
                     g1 = 0,
                     b1 = 0;
                 const sector = Math.floor(hPrime) % 6;
+
                 /* eslint-disable indent */
                 switch (sector) {
                     case 0:
@@ -743,11 +753,13 @@ const converters = (() => {
                         break;
                 }
                 /* eslint-enable indent */
+
                 const m = lNorm - chroma / 2;
-                const r = Math.round((r1 + m) * 255);
-                const g = Math.round((g1 + m) * 255);
-                const b = Math.round((b1 + m) * 255);
-                return converters.RGB.toXYZA([r, g, b, a]);
+                const red = (r1 + m) * 255;
+                const green = (g1 + m) * 255;
+                const blue = (b1 + m) * 255;
+                const rgbArray = converters.RGB.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.RGB.toXYZA(rgbArray);
             },
         },
 
@@ -773,10 +785,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                hue: { index: 0, min: 0, max: 360, loop: true },
-                whiteness: { index: 1, min: 0, max: 100 },
-                blackness: { index: 2, min: 0, max: 100 },
-                alpha: { index: 3, min: 0, max: 1 },
+                hue: { index: 0, min: 0, max: 360, loop: true, step: 0.001 },
+                whiteness: { index: 1, min: 0, max: 100, step: 0.001 },
+                blackness: { index: 2, min: 0, max: 100, step: 0.001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (hwbStr) => {
                 const inner = hwbStr
@@ -852,10 +864,11 @@ const converters = (() => {
                 const Bl = bl / 100;
                 if (W + Bl >= 1) {
                     const gray = W / (W + Bl);
-                    const c = Math.round(gray * 255);
+                    const c = gray * 255;
                     const rgbArray = converters.RGB.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
                     return converters.RGB.toXYZA(rgbArray);
                 }
+
                 let hue = h % 360;
                 if (hue < 0) hue += 360;
                 const hPrime = hue / 60;
@@ -889,9 +902,10 @@ const converters = (() => {
                     g1 = 0;
                     b1 = x;
                 }
-                const red = Math.round((r1 * (1 - W - Bl) + W) * 255);
-                const green = Math.round((g1 * (1 - W - Bl) + W) * 255);
-                const blue = Math.round((b1 * (1 - W - Bl) + W) * 255);
+
+                const red = (r1 * (1 - W - Bl) + W) * 255;
+                const green = (g1 * (1 - W - Bl) + W) * 255;
+                const blue = (b1 * (1 - W - Bl) + W) * 255;
                 const rgbArray = converters.RGB.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
                 return converters.RGB.toXYZA(rgbArray);
             },
@@ -919,10 +933,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                lightness: { index: 0, min: 0, max: 100 },
-                a: { index: 1, min: -Infinity, max: Infinity },
-                b: { index: 2, min: -Infinity, max: Infinity },
-                alpha: { index: 3, min: 0, max: 1 },
+                lightness: { index: 0, min: 0, max: 100, step: 0.001 },
+                a: { index: 1, min: -Infinity, max: Infinity, step: 0.001 },
+                b: { index: 2, min: -Infinity, max: Infinity, step: 0.001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (labStr: string): number[] => {
                 const match = labStr.match(converters.Lab.pattern);
@@ -996,7 +1010,7 @@ const converters = (() => {
             pattern: new RegExp(
                 "lch\\(\\s*" +
                     "(" +
-                    percentage +
+                    lchPercentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -1014,10 +1028,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                lightness: { index: 0, min: 0, max: 100 },
-                chroma: { index: 1, min: 0, max: 150 },
-                hue: { index: 2, min: 0, max: 360, loop: true },
-                alpha: { index: 3, min: 0, max: 1 },
+                lightness: { index: 0, min: 0, max: 100, step: 0.001 },
+                chroma: { index: 1, min: 0, max: 150, step: 0.001 },
+                hue: { index: 2, min: 0, max: 360, loop: true, step: 0.001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (lchStr: string): number[] => {
                 const match = lchStr.match(converters.LCH.pattern);
@@ -1117,10 +1131,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                lightness: { index: 0, min: 0, max: 1 },
-                a: { index: 1, min: -Infinity, max: Infinity },
-                b: { index: 2, min: -Infinity, max: Infinity },
-                alpha: { index: 3, min: 0, max: 1 },
+                lightness: { index: 0, min: 0, max: 1, step: 0.00001 },
+                a: { index: 1, min: -Infinity, max: Infinity, step: 0.00001 },
+                b: { index: 2, min: -Infinity, max: Infinity, step: 0.00001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
             toComponents: (oklabStr: string): number[] => {
                 const parseComponent = (value: string, name: string, isPercentage: boolean) => {
@@ -1203,7 +1217,7 @@ const converters = (() => {
             pattern: new RegExp(
                 "oklch\\(\\s*" +
                     "(" +
-                    percentage +
+                    lchPercentage +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
@@ -1221,10 +1235,10 @@ const converters = (() => {
                 "i"
             ),
             components: {
-                lightness: { index: 0, min: 0, max: 1 },
-                chrome: { index: 1, min: 0, max: Infinity },
-                hue: { index: 2, min: 0, max: 360, loop: true },
-                alpha: { index: 3, min: 0, max: 1 },
+                lightness: { index: 0, min: 0, max: 1, step: 0.00001 },
+                chrome: { index: 1, min: 0, max: Infinity, step: 0.00001 },
+                hue: { index: 2, min: 0, max: 360, loop: true, step: 0.00001 },
+                alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
             toComponents: (oklchStr: string): number[] => {
                 const parseComponent = (value: string, name: string, isPercentage: boolean) => {
@@ -1581,7 +1595,7 @@ class Color {
 
         if ("fromComponents" in converter) {
             const components = converter.fromXYZA(this.xyza);
-            const componentProps: Array<{ min: number; max: number; loop?: boolean }> = [];
+            const componentProps: Array<{ min: number; max: number; loop?: boolean; step: number }> = [];
             for (const [, props] of Object.entries(converter.components)) {
                 componentProps[props.index] = props;
             }
@@ -1591,12 +1605,17 @@ class Color {
                 if (!props) {
                     throw new Error(`Missing component properties for index ${i}`);
                 }
+
+                let clipped: number;
                 if (props.loop) {
                     const range = props.max - props.min;
-                    return props.min + ((((value - props.min) % range) + range) % range);
+                    clipped = props.min + ((((value - props.min) % range) + range) % range);
                 } else {
-                    return Math.min(props.max, Math.max(props.min, value));
+                    clipped = Math.min(props.max, Math.max(props.min, value));
                 }
+
+                const step = props.step;
+                return Math.round(clipped / step) * step;
             });
 
             return converter.fromComponents(adjustedComponents, options);
@@ -1611,8 +1630,27 @@ class Color {
      * @param {Format} format - The format to convert the color to.
      * @returns {number[]} An array representing the color in the specified format.
      */
-    toArray(space: Space) {
-        return converters[space].fromXYZA(this.xyza);
+    toArray(space: Space): number[] {
+        const converter = converters[space];
+        if (!converter) {
+            throw new Error(`Unsupported color space: ${space}`);
+        }
+
+        const components = converter.fromXYZA(this.xyza);
+
+        const processedComponents = components.map((value, index) => {
+            const props = Object.values(converter.components)[index];
+            if (!props) {
+                throw new Error(`Missing component properties for index ${index}`);
+            }
+
+            const clampedValue = Math.min(props.max, Math.max(props.min, value));
+
+            const step = props.step;
+            return Math.round(clampedValue / step) * step;
+        });
+
+        return processedComponents;
     }
 
     /**
@@ -1662,6 +1700,20 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    /**
+     * Converts the current color to a specified color space and provides methods to get, set, and mix color components.
+     *
+     * @param {S} space - The target color space.
+     * @returns {InSpace<S>} An object containing methods to get, set, and mix color components in the specified color space.
+     *
+     * @example
+     * ```typescript
+     * Color.from("red")
+     *     .in("HSL")
+     *     .set("saturation", (s) => s += 20)
+     *     .to("RGB");
+     * ```
+     */
     in<S extends Space>(space: S): InSpace<S> {
         const converter = converters[space];
 
