@@ -183,22 +183,28 @@ type InSpace<S extends Space> = {
     get: (component: Component<S>) => number; // eslint-disable-line no-unused-vars
 
     /**
-     * Sets the value of one or all components in the color space.
+     * Retrieves all the values of the color space.
      *
-     * Overload 1: Updates a single component.
+     * @returns An object containing all the values of the color space.
+     */
+    getAll: () => Record<string, number>;
+
+    /**
+     * Sets the value of one component in the color space.
+     *
      * @param component - The component to update.
      * @param value - The new value or a function that computes the new value.
-     *
-     * Overload 2: Updates all components.
-     * @param component - The literal "all".
-     * @param values - A rest parameter with one new value (or updater function) for each component.
-     *
      * @returns The updated color instance with added `.in()` methods.
      */
-    set: {
-        <C extends Component<S>>(component: C, value: number | ((prev: number) => number)): Color & InSpace<S>; // eslint-disable-line no-unused-vars
-        (component: "all", ...values: (number | ((prev: number) => number))[]): Color & InSpace<S>; // eslint-disable-line no-unused-vars
-    };
+    set: (component: Component<S>, value: number | ((prev: number) => number)) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
+
+    /**
+     * Sets the value of all components in the color space.
+     *
+     * @param values - A rest parameter with one new value (or updater function) for each component.
+     * @returns The updated color instance with added `.in()` methods.
+     */
+    setAll: (...values: (number | ((prev: number) => number))[]) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
 
     /**
      * Mixes the current color with another color by a specified amount.
@@ -386,7 +392,7 @@ const converters = (() => {
 
     return {
         XYZ: {
-            pattern: /color\(xyz\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/i,
+            pattern: /^color\(xyz\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/i,
             components: {
                 x: { index: 0, min: 0, max: 0.9505, step: 0.00001 },
                 y: { index: 1, min: 0, max: 1, step: 0.00001 },
@@ -422,7 +428,7 @@ const converters = (() => {
 
         RGB: {
             pattern: new RegExp(
-                "rgba?\\(\\s*" +
+                "^rgba?\\(\\s*" +
                     "(" +
                     rgbComponent +
                     ")" +
@@ -438,13 +444,13 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
-                red: { index: 0, min: 0, max: 255, step: 0.5 },
-                green: { index: 1, min: 0, max: 255, step: 0.5 },
-                blue: { index: 2, min: 0, max: 255, step: 0.5 },
+                red: { index: 0, min: 0, max: 255, step: 1 },
+                green: { index: 1, min: 0, max: 255, step: 1 },
+                blue: { index: 2, min: 0, max: 255, step: 1 },
                 alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (rgb: string) => {
@@ -516,7 +522,7 @@ const converters = (() => {
         },
 
         named: {
-            pattern: new RegExp(`\\b(${Object.keys(namedColors).join("|")})\\b`, "i"),
+            pattern: new RegExp(`^\\b(${Object.keys(namedColors).join("|")})\\b$`, "i"),
             toXYZA: (named: string): XYZA => {
                 const cleanedName = named.replace(/(?:\s+|-)/g, "").toLowerCase();
                 const rgb = namedColors[cleanedName];
@@ -549,7 +555,7 @@ const converters = (() => {
         },
 
         HEX: {
-            pattern: /#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b/,
+            pattern: /^#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b$/,
             toXYZA: (hex: string): XYZA => {
                 const match = hex.match(converters.HEX.pattern);
                 if (!match) {
@@ -609,7 +615,7 @@ const converters = (() => {
 
         HSL: {
             pattern: new RegExp(
-                "hsla?\\(\\s*" +
+                "^hsla?\\(\\s*" +
                     "(" +
                     hue +
                     "|none)" +
@@ -625,7 +631,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -778,7 +784,7 @@ const converters = (() => {
 
         HWB: {
             pattern: new RegExp(
-                "hwb\\(\\s*" +
+                "^hwb\\(\\s*" +
                     "(" +
                     hue +
                     "|none)" +
@@ -794,7 +800,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -926,7 +932,7 @@ const converters = (() => {
 
         Lab: {
             pattern: new RegExp(
-                "lab\\(\\s*" +
+                "^lab\\(\\s*" +
                     "(" +
                     percentage +
                     "|none)" +
@@ -942,7 +948,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -1021,7 +1027,7 @@ const converters = (() => {
 
         LCH: {
             pattern: new RegExp(
-                "lch\\(\\s*" +
+                "^lch\\(\\s*" +
                     "(" +
                     lchPercentage +
                     "|none)" +
@@ -1037,7 +1043,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -1124,7 +1130,7 @@ const converters = (() => {
 
         Oklab: {
             pattern: new RegExp(
-                "oklab\\(\\s*" +
+                "^oklab\\(\\s*" +
                     "(" +
                     percentage +
                     "|none)" +
@@ -1140,7 +1146,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -1228,7 +1234,7 @@ const converters = (() => {
 
         Oklch: {
             pattern: new RegExp(
-                "oklch\\(\\s*" +
+                "^oklch\\(\\s*" +
                     "(" +
                     lchPercentage +
                     "|none)" +
@@ -1244,7 +1250,7 @@ const converters = (() => {
                     "(" +
                     alpha +
                     ")" +
-                    ")?\\s*\\)",
+                    ")?\\s*\\)$",
                 "i"
             ),
             components: {
@@ -1374,8 +1380,8 @@ class Color {
      */
     private name: string | undefined;
 
-    constructor(xyza: XYZA) {
-        this.xyza = xyza;
+    constructor(...xyza: XYZA) {
+        this.xyza = [...xyza];
     }
 
     /**
@@ -1466,7 +1472,7 @@ class Color {
             } else {
                 xyza = converter.toXYZA(color);
             }
-            return new Color(xyza);
+            return new Color(...xyza);
         }
 
         for (const [, converter] of Object.entries(converters)) {
@@ -1478,15 +1484,21 @@ class Color {
                 } else {
                     xyza = converter.toXYZA(color);
                 }
-                return new Color(xyza);
+                return new Color(...xyza);
             }
         }
 
         throw new Error(`Unsupported color format: ${color}\nSupported formats: ${Object.keys(converters).join(", ")}`);
     }
 
+    /**
+     * Defines a color from individual components in a color space.
+     *
+     * @param space - The color space to create components from.
+     * @returns Set functions to define numbers for each component in the specified color space.
+     */
     static in<S extends Space>(space: S): InSpaceWithSetOnly<InSpace<S>> {
-        const result = new Color([0, 0, 0, 1]).in(space);
+        const result = new Color(0, 0, 0, 1).in(space);
         return result as InSpaceWithSetOnly<InSpace<S>>;
     }
 
@@ -1504,8 +1516,7 @@ class Color {
      */
     static type(color: string) {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
-            const anchoredPattern = new RegExp(`^${pattern.source}$`, pattern.flags);
-            if (anchoredPattern.test(color)) {
+            if (pattern.test(color.trim())) {
                 return key;
             }
         }
@@ -1581,7 +1592,7 @@ class Color {
      * @returns Whether the value matches the pattern for the specified type.
      */
     static isValid(type: Format, value: string) {
-        return Color.patterns[type].test(value);
+        return Color.patterns[type].test(value.trim());
     }
 
     /**
@@ -1739,39 +1750,57 @@ class Color {
             throw new Error(`Space ${space} does not have defined components.`);
         }
 
+        const clampValue = (value: number, min: number, max: number, step: number) => {
+            const clamped = Math.max(min, Math.min(max, value));
+            return Math.round(clamped / step) * step;
+        };
+
         const get = (component: Component<S>) => {
             const colorArray = converter.fromXYZA(this.xyza);
-            return colorArray[converter.components[component as keyof typeof converter.components].index];
+            const { min, max, step, index } = converter.components[component as keyof typeof converter.components];
+            return clampValue(colorArray[index], min, max, step);
+        };
+
+        const getAll = () => {
+            const colorArray = converter.fromXYZA(this.xyza);
+            const compNames = Object.keys(converter.components) as Component<S>[];
+            const result: Record<Component<S>, number> = {} as Record<Component<S>, number>;
+
+            compNames.forEach((comp) => {
+                const idx = converter.components[comp as keyof typeof converter.components].index;
+                const { min, max, step } = converter.components[comp as keyof typeof converter.components];
+                result[comp] = clampValue(colorArray[idx], min, max, step);
+            });
+
+            return result;
         };
 
         // eslint-disable-next-line no-unused-vars
-        const set = (component: Component<S> | "all", ...values: (number | ((prev: number) => number))[]) => {
-            if (component === "all") {
-                const compNames = Object.keys(converter.components) as Component<S>[];
-                const colorArray = converter.fromXYZA(this.xyza);
-                compNames.forEach((comp, i) => {
-                    const idx = converter.components[comp as keyof typeof converter.components].index;
-                    const currentValue = colorArray[idx];
-                    const newValue =
-                        typeof values[i] === "function"
-                            ? (values[i] as (prev: number) => number)(currentValue) // eslint-disable-line no-unused-vars
-                            : values[i];
-                    colorArray[idx] = newValue;
-                });
-                this.xyza = converter.toXYZA(colorArray);
-                const clone = this.clone();
-                return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
-            } else {
-                const colorArray = converter.fromXYZA(this.xyza);
-                const idx = converter.components[component as keyof typeof converter.components].index;
+        const set = (component: Component<S>, value: number | ((prev: number) => number)) => {
+            const colorArray = converter.fromXYZA(this.xyza);
+            const idx = converter.components[component as keyof typeof converter.components].index;
+            const currentValue = colorArray[idx];
+            const newValue = typeof value === "function" ? value(currentValue) : value;
+            colorArray[idx] = newValue;
+            this.xyza = converter.toXYZA(colorArray);
+            const clone = this.clone();
+            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
+        };
+
+        // eslint-disable-next-line no-unused-vars
+        const setAll = (...values: (number | ((prev: number) => number))[]) => {
+            const compNames = Object.keys(converter.components) as Component<S>[];
+            const colorArray = converter.fromXYZA(this.xyza);
+            compNames.forEach((comp, i) => {
+                const idx = converter.components[comp as keyof typeof converter.components].index;
                 const currentValue = colorArray[idx];
                 const newValue =
-                    typeof values[0] === "function" ? (values[0] as (prev: number) => number)(currentValue) : values[0]; // eslint-disable-line no-unused-vars
+                    typeof values[i] === "function" ? (values[i] as (prev: number) => number)(currentValue) : values[i]; // eslint-disable-line no-unused-vars
                 colorArray[idx] = newValue;
-                this.xyza = converter.toXYZA(colorArray);
-                const clone = this.clone();
-                return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
-            }
+            });
+            this.xyza = converter.toXYZA(colorArray);
+            const clone = this.clone();
+            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
         };
 
         const mixWith = (color: string, amount: number = 0.5) => {
@@ -1796,7 +1825,7 @@ class Color {
             return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
         };
 
-        return { get, set, mixWith };
+        return { get, getAll, set, setAll, mixWith };
     }
 
     /**
@@ -1811,7 +1840,7 @@ class Color {
      * @returns A new Color instance with identical RGBA values.
      */
     clone() {
-        return new Color(this.xyza);
+        return new Color(...this.xyza);
     }
 
     /**

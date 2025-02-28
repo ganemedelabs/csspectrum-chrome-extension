@@ -8,7 +8,7 @@ import Color from "./Color";
  * styles and attributes. The function also adds a click event listener to the `<mark>` elements to allow
  * cycling through different color representations.
  *
- * @param {Text} textNode - The text node to process and highlight color patterns within.
+ * @param textNode - The text node to process and highlight color patterns within.
  *
  * @remarks
  * The function performs the following steps:
@@ -26,8 +26,9 @@ function processTextNode(textNode: Text, modern = false) {
     const colorPatterns = Color.patterns;
 
     for (const [key, pattern] of Object.entries(colorPatterns)) {
+        const sanitizedSource = pattern.source.replace(/^\^/, "").replace(/\$$/, "");
         const flags = pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g";
-        const regex = new RegExp(pattern.source, flags);
+        const regex = new RegExp(sanitizedSource, flags);
 
         let match;
         while ((match = regex.exec(text)) !== null) {
@@ -56,7 +57,7 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = Color.from(colorString).to("RGB", { modern: false }) as string;
+        const bgColor = Color.from(colorString).to("XYZ") as string;
         const isNamedColor = colorPatterns.named.test(matchText);
 
         const pageBgColor = (function () {
@@ -112,8 +113,8 @@ function processTextNode(textNode: Text, modern = false) {
  * Processes a DOM node recursively. If the node is a text node, it processes the text content.
  * If the node is an element node, it recursively processes its child nodes, excluding certain tags.
  *
- * @param {Node} node - The DOM node to process.
- * @returns {Promise<void>} - A promise that resolves once the node and its children have been processed.
+ * @param node - The DOM node to process.
+ * @returns A promise that resolves once the node and its children have been processed.
  */
 async function processNode(node: Node, modern: boolean): Promise<void> {
     if (node.nodeType === Node.TEXT_NODE) {

@@ -64,11 +64,11 @@ describe("Color", () => {
     });
 
     it("should convert HSL to RGBA correctly", () => {
-        expect(Color.from("hsl(9, 100%, 60%)").to("RGB")).toBe("rgb(255, 81.5, 51)");
+        expect(Color.from("hsl(9, 100%, 60%)").to("RGB")).toBe("rgb(255, 82, 51)");
     });
 
     it("should convert HWB to RGBA correctly", () => {
-        expect(Color.from("hwb(9, 0%, 0%)").to("RGB")).toBe("rgb(255, 38.5, 0)");
+        expect(Color.from("hwb(9, 0%, 0%)").to("RGB")).toBe("rgb(255, 38, 0)");
     });
 
     it("should convert LAB to RGBA correctly", () => {
@@ -182,8 +182,13 @@ describe("Color", () => {
     });
 
     it("should define a color from components", () => {
-        const hsl = Color.in("HSL").set("all", 260, 100, 50).to("HSL");
+        const hsl = Color.in("HSL").setAll(260, 100, 50).to("HSL");
         expect(hsl).toBe("hsl(260, 100%, 50%)");
+    });
+
+    it("should retrieve all the components from a color space", () => {
+        const rgb = Color.from("rgb(0, 157, 255)").in("RGB").getAll();
+        expect(rgb).toEqual({ red: 0, green: 157, blue: 255, alpha: 1 });
     });
 });
 
