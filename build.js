@@ -129,12 +129,12 @@ function compareVersions(v1, v2) {
         if (compareVersions(pkgVersion, highestVersion) < 0) {
             packageJson.version = highestVersion;
             fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
-            process.stdout.write(`🔍 Updated ${green}package.json${reset} version to ${highestVersion}\n`);
+            process.stdout.write(`🆕 Updated ${green}package.json${reset} version to ${highestVersion}\n`);
         }
         if (compareVersions(manVersion, highestVersion) < 0) {
             manifestJson.version = highestVersion;
             fs.writeFileSync(manifestJsonPath, JSON.stringify(manifestJson, null, 2));
-            process.stdout.write(`🔍 Updated ${green}manifest.json${reset} version to ${highestVersion}\n`);
+            process.stdout.write(`🆕 Updated ${green}manifest.json${reset} version to ${highestVersion}\n`);
         }
     } else {
         process.stdout.write("✅ ZIP for current version exists. Version unchanged.\n");

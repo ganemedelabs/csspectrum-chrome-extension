@@ -70,33 +70,33 @@ interface ConverterWithComponents {
     /**
      * Converts a color string to an array of component values.
      *
-     * @param {string} colorString - The color string to convert.
-     * @returns {number[]} An array of component values.
+     * @param colorString - The color string to convert.
+     * @returns An array of component values.
      */
     toComponents: (colorString: string) => number[]; // eslint-disable-line no-unused-vars
 
     /**
      * Converts an array of component values to a color string.
      *
-     * @param {number[]} colorArray - The array of component values to convert.
-     * @param {FormattingOptions} options - Optional formatting options.
-     * @returns {string} The color string.
+     * @param colorArray - The array of component values to convert.
+     * @param options - Optional formatting options.
+     * @returns The color string.
      */
     fromComponents: (colorArray: number[], options?: FormattingOptions) => string; // eslint-disable-line no-unused-vars
 
     /**
      * Converts an array of component values to an XYZA color space.
      *
-     * @param {number[]} colorArray - The array of component values to convert.
-     * @returns {XYZA} The XYZA color space representation.
+     * @param colorArray - The array of component values to convert.
+     * @returns The XYZA color space representation.
      */
     toXYZA: (colorArray: number[]) => XYZA; // eslint-disable-line no-unused-vars
 
     /**
      * Converts an XYZA color space representation to an array of component values.
      *
-     * @param {XYZA} xyza - The XYZA color space representation to convert.
-     * @returns {number[]} The array of component values.
+     * @param xyza - The XYZA color space representation to convert.
+     * @returns The array of component values.
      */
     fromXYZA: (xyza: XYZA) => number[]; // eslint-disable-line no-unused-vars
 }
@@ -113,16 +113,16 @@ interface ConverterWithoutComponents {
     /**
      * Converts a color string to an XYZA color space representation.
      *
-     * @param {string} colorString - The color string to convert.
-     * @returns {XYZA} The XYZA color space representation.
+     * @param colorString - The color string to convert.
+     * @returns The XYZA color space representation.
      */
     toXYZA: (colorString: string) => XYZA; // eslint-disable-line no-unused-vars
 
     /**
      * Converts an XYZA color space representation to a color string.
      *
-     * @param {XYZA} xyza - The XYZA color space representation to convert.
-     * @returns {string} The color string.
+     * @param xyza - The XYZA color space representation to convert.
+     * @returns The color string.
      */
     fromXYZA: (xyza: XYZA) => string; // eslint-disable-line no-unused-vars
 }
@@ -177,28 +177,41 @@ type InSpace<S extends Space> = {
     /**
      * Retrieves the value of a specific component in the color space.
      *
-     * @param {Component<S>} component - The component to retrieve the value for.
-     * @returns {number} The value of the specified component.
+     * @param component - The component to retrieve the value for.
+     * @returns The value of the specified component.
      */
     get: (component: Component<S>) => number; // eslint-disable-line no-unused-vars
 
     /**
-     * Sets the value of a specific component in the color space.
+     * Sets the value of one or all components in the color space.
      *
-     * @param {Component<S>} component - The component to set the value for.
-     * @param {number} value - The new value for the component, or a function that takes the previous value and returns the new value.
-     * @returns {Color} The updated color.
+     * Overload 1: Updates a single component.
+     * @param component - The component to update.
+     * @param value - The new value or a function that computes the new value.
+     *
+     * Overload 2: Updates all components.
+     * @param component - The literal "all".
+     * @param values - A rest parameter with one new value (or updater function) for each component.
+     *
+     * @returns The updated color instance with added `.in()` methods.
      */
-    set: (component: Component<S>, value: number | ((prev: number) => number)) => Color; // eslint-disable-line no-unused-vars
+    set: {
+        <C extends Component<S>>(component: C, value: number | ((prev: number) => number)): Color & InSpace<S>; // eslint-disable-line no-unused-vars
+        (component: "all", ...values: (number | ((prev: number) => number))[]): Color & InSpace<S>; // eslint-disable-line no-unused-vars
+    };
 
     /**
      * Mixes the current color with another color by a specified amount.
      *
-     * @param {string} color - The color to mix with.
-     * @param {number} amount - The amount to mix the other color in, typically a value between 0 and 1.
-     * @returns  The resulting mixed color.
+     * @param color - The color to mix with.
+     * @param amount - The amount to mix the other color in, typically a value between 0 and 1.
+     * @returns The updated color instance with added `.in()` methods..
      */
-    mixWith: (color: string, amount: number) => Color; // eslint-disable-line no-unused-vars
+    mixWith: (color: string, amount: number) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
+};
+
+type InSpaceWithSetOnly<T> = {
+    [K in keyof T as K extends `set${string}` ? K : never]: T[K];
 };
 
 /**
@@ -531,7 +544,7 @@ const converters = (() => {
                     }
                 }
 
-                throw new Error(`Invalid named color: ${xyza}`);
+                throw new Error(`Invalid named color: `);
             },
         },
 
@@ -1236,7 +1249,7 @@ const converters = (() => {
             ),
             components: {
                 lightness: { index: 0, min: 0, max: 1, step: 0.00001 },
-                chrome: { index: 1, min: 0, max: Infinity, step: 0.00001 },
+                chroma: { index: 1, min: 0, max: Infinity, step: 0.00001 },
                 hue: { index: 2, min: 0, max: 360, loop: true, step: 0.00001 },
                 alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
@@ -1429,9 +1442,9 @@ class Color {
     /**
      * Creates a new `Color` instance from a given color string and optional format.
      *
-     * @param {string} color - The color string to convert.
-     * @param {Format} format - The optional format of the color string. If provided, the function will use the corresponding converter.
-     * @returns {Color} A new `Color` instance.
+     * @param color - The color string to convert.
+     * @param format - The optional format of the color string. If provided, the function will use the corresponding converter.
+     * @returns A new `Color` instance.
      */
     static from(color: string, format?: Format) {
         if (format) {
@@ -1472,6 +1485,11 @@ class Color {
         throw new Error(`Unsupported color format: ${color}\nSupported formats: ${Object.keys(converters).join(", ")}`);
     }
 
+    static in<S extends Space>(space: S): InSpaceWithSetOnly<InSpace<S>> {
+        const result = new Color([0, 0, 0, 1]).in(space);
+        return result as InSpaceWithSetOnly<InSpace<S>>;
+    }
+
     /**
      * ────────────────────────────────────────────────────────
      * Static Utility Methods
@@ -1481,8 +1499,8 @@ class Color {
     /**
      * Determines the type of the given color string based on predefined patterns.
      *
-     * @param {string} color - The color string to be evaluated.
-     * @returns {string} The key corresponding to the matched color pattern.
+     * @param color - The color string to be evaluated.
+     * @returns The key corresponding to the matched color pattern.
      */
     static type(color: string) {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
@@ -1500,9 +1518,9 @@ class Color {
      * Calculates the contrast ratio between two colors.
      * The contrast ratio is determined using the relative luminance of the colors.
      *
-     * @param {string} color1 - The first color in hexadecimal format (e.g., "#FFFFFF").
-     * @param {string} color2 - The second color in hexadecimal format (e.g., "#000000").
-     * @returns {number} The contrast ratio between the two colors.
+     * @param color1 - The first color in hexadecimal format (e.g., "#FFFFFF").
+     * @param color2 - The second color in hexadecimal format (e.g., "#000000").
+     * @returns The contrast ratio between the two colors.
      */
     static contrastRatio(color1: string, color2: string) {
         const l1 = Color.from(color1).getLuminance();
@@ -1523,11 +1541,11 @@ class Color {
      *   - AA: 3:1
      *   - AAA: 4.5:1
      *
-     * @param {string} color1 - The first color in a valid CSS format.
-     * @param {string} color2 - The second color in a valid CSS format.
-     * @param {"AA"|"AAA"} [level="AA"] - The accessibility level to check against.
-     * @param {boolean} [isLargeText=false] - Whether the text is considered large. Defaults to false (normal text).
-     * @returns {boolean} True if the contrast ratio meets or exceeds the WCAG threshold for the specified level and text size; otherwise, false.
+     * @param color1 - The first color in a valid CSS format.
+     * @param color2 - The second color in a valid CSS format.
+     * @param level - The accessibility level to check against.
+     * @param isLargeText - Whether the text is considered large. Defaults to false (normal text).
+     * @returns True if the contrast ratio meets or exceeds the WCAG threshold for the specified level and text size; otherwise, false.
      */
     static isAccessiblePair(color1: string, color2: string, level: "AA" | "AAA" = "AA", isLargeText = false) {
         const contrast = Color.contrastRatio(color1, color2);
@@ -1543,8 +1561,8 @@ class Color {
     /**
      * Generates a random color in the specified format.
      *
-     * @param {string} type - The target format for the random color.
-     * @returns {string} A random color in the specified format.
+     * @param type - The target format for the random color.
+     * @returns A random color in the specified format.
      */
     static random(type: Format) {
         if (type === "named") {
@@ -1558,9 +1576,9 @@ class Color {
     /**
      * Checks if the given value matches the pattern for the specified type.
      *
-     * @param {string} type - The type of pattern to validate against.
-     * @param {String} value - The string value to be validated.
-     * @returns {boolean} Whether the value matches the pattern for the specified type.
+     * @param type - The type of pattern to validate against.
+     * @param value - The string value to be validated.
+     * @returns Whether the value matches the pattern for the specified type.
      */
     static isValid(type: Format, value: string) {
         return Color.patterns[type].test(value);
@@ -1581,9 +1599,9 @@ class Color {
     /**
      * Converts the current color to the specified format.
      *
-     * @param {Format} format - The target color format.
-     * @param {FormattingOptions} options - Optional formatting options. Defaults to `{ modern: false }`.
-     * @returns {string} The color in the specified format.
+     * @param format - The target color format.
+     * @param options - Optional formatting options. Defaults to `{ modern: false }`.
+     * @returns The color in the specified format.
      */
     to(format: Format, options: FormattingOptions = { modern: false }) {
         const converter = converters[format];
@@ -1627,8 +1645,8 @@ class Color {
     /**
      * Converts the current color representation to an array in the specified format.
      *
-     * @param {Format} format - The format to convert the color to.
-     * @returns {number[]} An array representing the color in the specified format.
+     * @param format - The format to convert the color to.
+     * @returns An array representing the color in the specified format.
      */
     toArray(space: Space): number[] {
         const converter = converters[space];
@@ -1656,8 +1674,8 @@ class Color {
     /**
      * Advances to the next color format based on the current index.
      *
-     * @param {string} currentColorString -
-     * @returns {[string, number]} A tuple containing the next color as a string and the updated index.
+     * @param currentColorString - The current color's string in any supported format.
+     * @returns A tuple containing the next color as a string and the updated index.
      */
     toNextColor(
         currentColorString: string,
@@ -1703,8 +1721,8 @@ class Color {
     /**
      * Converts the current color to a specified color space and provides methods to get, set, and mix color components.
      *
-     * @param {S} space - The target color space.
-     * @returns {InSpace<S>} An object containing methods to get, set, and mix color components in the specified color space.
+     * @param space - The target color space.
+     * @returns An object containing methods to get, set, and mix color components in the specified color space.
      *
      * @example
      * ```typescript
@@ -1727,17 +1745,36 @@ class Color {
         };
 
         // eslint-disable-next-line no-unused-vars
-        const set = (component: Component<S>, value: number | ((prev: number) => number)) => {
-            const colorArray = converter.fromXYZA(this.xyza);
-            const index = converter.components[component as keyof typeof converter.components].index;
-            const currentValue = colorArray[index];
-            const newValue = typeof value === "function" ? value(currentValue) : value;
-            colorArray[index] = newValue;
-            this.xyza = converter.toXYZA(colorArray);
-            return this;
+        const set = (component: Component<S> | "all", ...values: (number | ((prev: number) => number))[]) => {
+            if (component === "all") {
+                const compNames = Object.keys(converter.components) as Component<S>[];
+                const colorArray = converter.fromXYZA(this.xyza);
+                compNames.forEach((comp, i) => {
+                    const idx = converter.components[comp as keyof typeof converter.components].index;
+                    const currentValue = colorArray[idx];
+                    const newValue =
+                        typeof values[i] === "function"
+                            ? (values[i] as (prev: number) => number)(currentValue) // eslint-disable-line no-unused-vars
+                            : values[i];
+                    colorArray[idx] = newValue;
+                });
+                this.xyza = converter.toXYZA(colorArray);
+                const clone = this.clone();
+                return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
+            } else {
+                const colorArray = converter.fromXYZA(this.xyza);
+                const idx = converter.components[component as keyof typeof converter.components].index;
+                const currentValue = colorArray[idx];
+                const newValue =
+                    typeof values[0] === "function" ? (values[0] as (prev: number) => number)(currentValue) : values[0]; // eslint-disable-line no-unused-vars
+                colorArray[idx] = newValue;
+                this.xyza = converter.toXYZA(colorArray);
+                const clone = this.clone();
+                return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
+            }
         };
 
-        const mixWith = (color: string, amount: number) => {
+        const mixWith = (color: string, amount: number = 0.5) => {
             const t = Math.max(0, Math.min(amount, 1));
 
             const otherColor = Color.from(color);
@@ -1755,7 +1792,8 @@ class Color {
                 }
             }
 
-            return this;
+            const clone = this.clone();
+            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
         };
 
         return { get, set, mixWith };
@@ -1770,7 +1808,7 @@ class Color {
     /**
      * Creates a new instance of the Color class with the same RGBA values.
      *
-     * @returns {Color} A new Color instance with identical RGBA values.
+     * @returns A new Color instance with identical RGBA values.
      */
     clone() {
         return new Color(this.xyza);
@@ -1779,8 +1817,8 @@ class Color {
     /**
      * Compares the current color object with another color string.
      *
-     * @param {string} color - The color string to compare with the current color object.
-     * @returns {boolean} Whether the two colors are equal.
+     * @param color - The color string to compare with the current color object.
+     * @returns Whether the two colors are equal.
      */
     equals(color: string) {
         return this.to("XYZ") === Color.from(color).to("XYZ");
@@ -1791,7 +1829,7 @@ class Color {
      * A color is considered cool if its hue (H) in the HSL color space
      * is between 60 degrees and 300 degrees.
      *
-     * @returns {boolean} True if the color is cool, false otherwise.
+     * @returns True if the color is cool, false otherwise.
      */
     isCool() {
         const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
@@ -1803,7 +1841,7 @@ class Color {
      * A color is considered warm if its hue (H) in the HSL color space
      * is less than or equal to 60 degrees or greater than or equal to 300 degrees.
      *
-     * @returns {boolean} True if the color is warm, false otherwise.
+     * @returns True if the color is warm, false otherwise.
      */
     isWarm() {
         const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
@@ -1813,8 +1851,8 @@ class Color {
     /**
      * Determines if the given background color is considered dark.
      *
-     * @param {string} backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
-     * @returns {boolean} Whether the color is considered dark.
+     * @param backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
+     * @returns Whether the color is considered dark.
      */
     isDark(backgroundColor: string = "rgb(255, 255, 255)") {
         return this.getLuminance(backgroundColor) < 0.5;
@@ -1823,8 +1861,8 @@ class Color {
     /**
      * Determines if the given background color is considered light.
      *
-     * @param {string} backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
-     * @returns {boolean} Whether the color is considered light.
+     * @param backgroundColor - The background color. Defaults to "rgb(255, 255, 255)".
+     * @returns Whether the color is considered light.
      */
     isLight(backgroundColor: string = "rgb(255, 255, 255)") {
         return !this.isDark(backgroundColor);
@@ -1833,8 +1871,8 @@ class Color {
     /**
      * Calculates the luminance of the color.
      *
-     * @param {string} backgroundColor - The background color used if the color is not fully opaque. Defaults to white ("rgb(255, 255, 255)").
-     * @returns {number} The luminance value of the color, a number between 0 and 1.
+     * @param backgroundColor - The background color used if the color is not fully opaque. Defaults to white ("rgb(255, 255, 255)").
+     * @returns The luminance value of the color, a number between 0 and 1.
      */
     getLuminance(backgroundColor: string = "rgb(255, 255, 255)") {
         const [, Y, , alpha] = this.toArray("XYZ");

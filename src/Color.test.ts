@@ -171,6 +171,20 @@ describe("Color", () => {
         const randomColor = Color.random("named");
         expect(Color.type(randomColor)).toBe("named");
     });
+
+    it("should chain multiple set methods", () => {
+        const hsl = Color.from("hsl(0, 100%, 50%)")
+            .in("HSL")
+            .set("hue", (h) => (h += 100))
+            .set("saturation", (s) => (s -= 20))
+            .to("HSL");
+        expect(hsl).toBe("hsl(100, 80%, 50%)");
+    });
+
+    it("should define a color from components", () => {
+        const hsl = Color.in("HSL").set("all", 260, 100, 50).to("HSL");
+        expect(hsl).toBe("hsl(260, 100%, 50%)");
+    });
 });
 
 describe("Color Patterns", () => {
