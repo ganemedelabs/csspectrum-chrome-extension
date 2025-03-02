@@ -190,21 +190,12 @@ type InSpace<S extends Space> = {
     getAll: () => Record<string, number>;
 
     /**
-     * Sets the value of one component in the color space.
-     *
-     * @param component - The component to update.
-     * @param value - The new value or a function that computes the new value.
-     * @returns The updated color instance with added `.in()` methods.
-     */
-    set: (component: Component<S>, value: number | ((prev: number) => number)) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
-
-    /**
      * Sets the value of all components in the color space.
      *
      * @param values - A rest parameter with one new value (or updater function) for each component.
      * @returns The updated color instance with added `.in()` methods.
      */
-    setAll: (...values: (number | ((prev: number) => number))[]) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
+    set: (values: Partial<{ [K in Component<S>]: number | ((prev: number) => number) }>) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
 
     /**
      * Mixes the current color with another color by a specified amount.
@@ -391,7 +382,7 @@ const converters = (() => {
     const lchPercentage = percentage + "|" + labComponent;
 
     return {
-        XYZ: {
+        xyz: {
             pattern: /^color\(xyz\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/i,
             components: {
                 x: { index: 0, min: 0, max: 0.9505, step: 0.00001 },
@@ -400,7 +391,7 @@ const converters = (() => {
                 alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
             toComponents: (xyz: string): number[] => {
-                const match = xyz.match(converters.XYZ.pattern) as RegExpMatchArray;
+                const match = xyz.match(converters.xyz.pattern) as RegExpMatchArray;
                 if (!match) {
                     throw new Error(`Invalid XYZ color format: ${xyz}`);
                 }
@@ -426,7 +417,7 @@ const converters = (() => {
             toXYZA: (xyzArray: number[]): XYZA => xyzArray as XYZA,
         },
 
-        RGB: {
+        rgb: {
             pattern: new RegExp(
                 "^rgba?\\(\\s*" +
                     "(" +
@@ -457,7 +448,7 @@ const converters = (() => {
                 const convert = (value: string) =>
                     value.includes("%") ? (parseFloat(value) / 100) * 255 : parseFloat(value);
 
-                const match = rgb.match(converters.RGB.pattern) as RegExpMatchArray;
+                const match = rgb.match(converters.rgb.pattern) as RegExpMatchArray;
                 if (!match) {
                     throw new Error(`Invalid RGB color format: ${rgb}`);
                 }
@@ -531,10 +522,10 @@ const converters = (() => {
                     throw new Error(`Invalid named color: ${named}`);
                 }
 
-                return converters.RGB.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
+                return converters.rgb.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
             },
             fromXYZA: (xyza: XYZA): string => {
-                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza).map((n) => Math.round(n));
+                const [r, g, b, a = 1] = converters.rgb.fromXYZA(xyza).map((n) => Math.round(n));
 
                 if (a === 1) {
                     for (const [name, rgb] of Object.entries(namedColors)) {
@@ -550,14 +541,14 @@ const converters = (() => {
                     }
                 }
 
-                throw new Error(`Invalid named color: `);
+                throw new Error();
             },
         },
 
-        HEX: {
+        hex: {
             pattern: /^#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b$/,
             toXYZA: (hex: string): XYZA => {
-                const match = hex.match(converters.HEX.pattern);
+                const match = hex.match(converters.hex.pattern);
                 if (!match) {
                     throw new Error(`Invalid HEX color format: ${hex}`);
                 }
@@ -588,12 +579,12 @@ const converters = (() => {
                     a = parseInt(HEX.slice(6, 8), 16) / 255;
                 }
 
-                const rgbArray = converters.RGB.toComponents(`rgb(${r}, ${g}, ${b})`);
-                const [X, Y, Z] = converters.RGB.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${r}, ${g}, ${b})`);
+                const [X, Y, Z] = converters.rgb.toXYZA(rgbArray);
                 return [X, Y, Z, a];
             },
             fromXYZA: (xyza: XYZA) => {
-                const [r, g, b, a] = converters.RGB.fromXYZA(xyza).map((n) => Math.round(n));
+                const [r, g, b, a] = converters.rgb.fromXYZA(xyza).map((n) => Math.round(n));
 
                 const toHex = (x: number) => {
                     const hex = x.toString(16);
@@ -613,7 +604,7 @@ const converters = (() => {
             },
         },
 
-        HSL: {
+        hsl: {
             pattern: new RegExp(
                 "^hsla?\\(\\s*" +
                     "(" +
@@ -702,7 +693,7 @@ const converters = (() => {
                 }
             },
             fromXYZA: (xyza: XYZA): number[] => {
-                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
+                const [r, g, b, a = 1] = converters.rgb.fromXYZA(xyza);
                 const rNorm = r / 255;
                 const gNorm = g / 255;
                 const bNorm = b / 255;
@@ -777,12 +768,12 @@ const converters = (() => {
                 const red = (r1 + m) * 255;
                 const green = (g1 + m) * 255;
                 const blue = (b1 + m) * 255;
-                const rgbArray = converters.RGB.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
-                return converters.RGB.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.rgb.toXYZA(rgbArray);
             },
         },
 
-        HWB: {
+        hwb: {
             pattern: new RegExp(
                 "^hwb\\(\\s*" +
                     "(" +
@@ -855,7 +846,7 @@ const converters = (() => {
                 }
             },
             fromXYZA: (xyza: XYZA): number[] => {
-                const [r, g, b, a = 1] = converters.RGB.fromXYZA(xyza);
+                const [r, g, b, a = 1] = converters.rgb.fromXYZA(xyza);
                 const rNorm = r / 255;
                 const gNorm = g / 255;
                 const bNorm = b / 255;
@@ -884,8 +875,8 @@ const converters = (() => {
                 if (W + Bl >= 1) {
                     const gray = W / (W + Bl);
                     const c = gray * 255;
-                    const rgbArray = converters.RGB.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
-                    return converters.RGB.toXYZA(rgbArray);
+                    const rgbArray = converters.rgb.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
+                    return converters.rgb.toXYZA(rgbArray);
                 }
 
                 let hue = h % 360;
@@ -925,12 +916,12 @@ const converters = (() => {
                 const red = (r1 * (1 - W - Bl) + W) * 255;
                 const green = (g1 * (1 - W - Bl) + W) * 255;
                 const blue = (b1 * (1 - W - Bl) + W) * 255;
-                const rgbArray = converters.RGB.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
-                return converters.RGB.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.rgb.toXYZA(rgbArray);
             },
         },
 
-        Lab: {
+        lab: {
             pattern: new RegExp(
                 "^lab\\(\\s*" +
                     "(" +
@@ -958,7 +949,7 @@ const converters = (() => {
                 alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (labStr: string): number[] => {
-                const match = labStr.match(converters.Lab.pattern);
+                const match = labStr.match(converters.lab.pattern);
                 if (!match) {
                     throw new Error(`Invalid LAB color format: ${labStr}`);
                 }
@@ -1025,7 +1016,7 @@ const converters = (() => {
             },
         },
 
-        LCH: {
+        lch: {
             pattern: new RegExp(
                 "^lch\\(\\s*" +
                     "(" +
@@ -1053,7 +1044,7 @@ const converters = (() => {
                 alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (lchStr: string): number[] => {
-                const match = lchStr.match(converters.LCH.pattern);
+                const match = lchStr.match(converters.lch.pattern);
                 if (!match) {
                     throw new Error(`Invalid LCH color format: ${lchStr}`);
                 }
@@ -1128,7 +1119,7 @@ const converters = (() => {
             },
         },
 
-        Oklab: {
+        oklab: {
             pattern: new RegExp(
                 "^oklab\\(\\s*" +
                     "(" +
@@ -1166,7 +1157,7 @@ const converters = (() => {
                     return num;
                 };
 
-                const match = oklabStr.match(converters.Oklab.pattern);
+                const match = oklabStr.match(converters.oklab.pattern);
                 if (!match) throw new Error(`Invalid OKLab format: ${oklabStr}`);
 
                 const L = parseComponent(match[1], "lightness", true);
@@ -1232,7 +1223,7 @@ const converters = (() => {
             },
         },
 
-        Oklch: {
+        oklch: {
             pattern: new RegExp(
                 "^oklch\\(\\s*" +
                     "(" +
@@ -1291,7 +1282,7 @@ const converters = (() => {
                     return ((num % 360) + 360) % 360;
                 };
 
-                const match = oklchStr.match(converters.Oklch.pattern);
+                const match = oklchStr.match(converters.oklch.pattern);
                 if (!match) throw new Error(`Invalid OKLCH format: ${oklchStr}`);
 
                 const L = parseComponent(match[1], "lightness", true);
@@ -1380,8 +1371,8 @@ class Color {
      */
     private name: string | undefined;
 
-    constructor(...xyza: XYZA) {
-        this.xyza = [...xyza];
+    constructor(x: number, y: number, z: number, a: number | undefined) {
+        this.xyza = [x, y, z, a];
     }
 
     /**
@@ -1407,7 +1398,7 @@ class Color {
     private set xyza(newValue: XYZA) {
         const [x, y, z, a = 1] = newValue;
 
-        const [r, g, b] = (converters.RGB.fromComponents([x, y, z, a]) as string).match(/\d+/g)!.map(Number);
+        const [r, g, b] = (converters.rgb.fromComponents([x, y, z, a]) as string).match(/\d+/g)!.map(Number);
 
         for (const [name, rgb] of Object.entries(namedColors)) {
             if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
@@ -1465,14 +1456,14 @@ class Color {
                 throw new Error(`Invalid ${format} color format: ${color}`);
             }
 
-            let xyza: XYZA;
+            let x, y, z, a;
             if ("toComponents" in converter) {
                 const components = converter.toComponents(color);
-                xyza = converter.toXYZA(components);
+                [x, y, z, a] = converter.toXYZA(components);
             } else {
-                xyza = converter.toXYZA(color);
+                [x, y, z, a] = converter.toXYZA(color);
             }
-            return new Color(...xyza);
+            return new Color(x, y, z, a);
         }
 
         for (const [, converter] of Object.entries(converters)) {
@@ -1514,10 +1505,10 @@ class Color {
      * @param color - The color string to be evaluated.
      * @returns The key corresponding to the matched color pattern.
      */
-    static type(color: string) {
+    static type(color: string): Format {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
             if (pattern.test(color.trim())) {
-                return key;
+                return key as Format;
             }
         }
         throw new Error(
@@ -1776,31 +1767,21 @@ class Color {
         };
 
         // eslint-disable-next-line no-unused-vars
-        const set = (component: Component<S>, value: number | ((prev: number) => number)) => {
+        const set = (values: Partial<{ [K in Component<S>]: number | ((prev: number) => number) }>) => {
             const colorArray = converter.fromXYZA(this.xyza);
-            const idx = converter.components[component as keyof typeof converter.components].index;
-            const currentValue = colorArray[idx];
-            const newValue = typeof value === "function" ? value(currentValue) : value;
-            colorArray[idx] = newValue;
-            this.xyza = converter.toXYZA(colorArray);
-            const clone = this.clone();
-            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
-        };
-
-        // eslint-disable-next-line no-unused-vars
-        const setAll = (...values: (number | ((prev: number) => number))[]) => {
             const compNames = Object.keys(converter.components) as Component<S>[];
-            const colorArray = converter.fromXYZA(this.xyza);
-            compNames.forEach((comp, i) => {
-                const idx = converter.components[comp as keyof typeof converter.components].index;
-                const currentValue = colorArray[idx];
-                const newValue =
-                    typeof values[i] === "function" ? (values[i] as (prev: number) => number)(currentValue) : values[i]; // eslint-disable-line no-unused-vars
-                colorArray[idx] = newValue;
+            compNames.forEach((comp) => {
+                if (comp in values) {
+                    const idx = converter.components[comp as keyof typeof converter.components].index;
+                    const currentValue = colorArray[idx];
+                    const valueOrFunc = values[comp];
+                    const newValue = typeof valueOrFunc === "function" ? valueOrFunc(currentValue) : valueOrFunc;
+                    colorArray[idx] = newValue as number;
+                }
             });
             this.xyza = converter.toXYZA(colorArray);
             const clone = this.clone();
-            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
+            return Object.assign(clone, { ...clone.in(space) }) as typeof this & InSpace<S>;
         };
 
         const mixWith = (color: string, amount: number = 0.5) => {
@@ -1817,7 +1798,9 @@ class Color {
                     const otherValue = otherInterface.get(comp);
 
                     const mixedValue = currentValue * (1 - t) + otherValue * t;
-                    set(comp, mixedValue);
+                    set({ [comp]: mixedValue } as Partial<{
+                        [K in Component<S>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
+                    }>);
                 }
             }
 
@@ -1825,7 +1808,7 @@ class Color {
             return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
         };
 
-        return { get, getAll, set, setAll, mixWith };
+        return { get, getAll, set, mixWith };
     }
 
     /**
@@ -1850,7 +1833,7 @@ class Color {
      * @returns Whether the two colors are equal.
      */
     equals(color: string) {
-        return this.to("XYZ") === Color.from(color).to("XYZ");
+        return this.to("xyz") === Color.from(color).to("xyz");
     }
 
     /**
@@ -1861,7 +1844,7 @@ class Color {
      * @returns True if the color is cool, false otherwise.
      */
     isCool() {
-        const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        const [h] = (this.to("hsl") as string).match(/\d+/g)!.map(Number);
         return h > 60 && h < 300;
     }
 
@@ -1873,7 +1856,7 @@ class Color {
      * @returns True if the color is warm, false otherwise.
      */
     isWarm() {
-        const [h] = (this.to("HSL") as string).match(/\d+/g)!.map(Number);
+        const [h] = (this.to("hsl") as string).match(/\d+/g)!.map(Number);
         return h <= 60 || h >= 300;
     }
 
@@ -1904,13 +1887,13 @@ class Color {
      * @returns The luminance value of the color, a number between 0 and 1.
      */
     getLuminance(backgroundColor: string = "rgb(255, 255, 255)") {
-        const [, Y, , alpha] = this.toArray("XYZ");
+        const [, Y, , alpha] = this.toArray("xyz");
 
         if (alpha === 1) {
             return Y;
         }
 
-        const bgXYZ = Color.from(backgroundColor).toArray("XYZ");
+        const bgXYZ = Color.from(backgroundColor).toArray("xyz");
         const blendedY = (1 - alpha) * bgXYZ[1] + alpha * Y;
 
         return blendedY;

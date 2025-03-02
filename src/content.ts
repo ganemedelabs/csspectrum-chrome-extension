@@ -57,7 +57,7 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = Color.from(colorString).to("XYZ") as string;
+        const bgColor = Color.from(colorString).to("xyz") as string;
         const isNamedColor = colorPatterns.named.test(matchText);
 
         const pageBgColor = (function () {

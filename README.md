@@ -25,7 +25,7 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     - RGB and RGBA (e.g., `rgb(255, 87, 51)`, `rgba(255, 87, 51, 0.5)`)
     - HSL and HSLA (e.g., `hsl(10, 100%, 60%)`, `hsla(10, 100%, 60%, 0.5)`)
     - HWB (e.g., `hwb(240 100% 0%)`)
-    - LAB (e.g., `lab(50% 20 -30)`)
+    - Lab (e.g., `lab(50% 20 -30)`)
     - LCH (e.g., `lch(50% 30 270)`)
     - Oklab (e.g., `oklab(50% 0.1 -0.2)`)
     - Oklch (e.g., `oklch(50% 0.1 270)`)
@@ -37,7 +37,7 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     3. Hexadecimal
     4. HSL
     5. HWB
-    6. LAB
+    6. Lab
     7. LCH
     8. Oklab
     9. Oklch
@@ -48,21 +48,19 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
 CSSpectrum will soon support additional **CSS color models**, including:
 
 - [ ] **Relative CSS Colors**:
-  - `hsl(from red 240deg s l)`
-  - `hwb(from green h w b / 0.5)`
-  - `lch(from blue calc(l + 20) c h)`
 
-- [ ] **Gradients**:
-  - `linear-gradient(to right, #ff5733, #ffcc00)`
-  - `radial-gradient(circle, #ff5733, #ffcc00)`
+    - `hsl(from red 240deg s l)`
+    - `hwb(from green h w b / 0.5)`
+    - `lch(from blue calc(l + 20) c h)`
 
 - [ ] **CSS Variables**:
-  - `var(--my-color)`
-  - `rgb(255, var(--green-value), 51)`
+
+    - `var(--my-color)`
+    - `rgb(255, var(--green-value), 51)`
 
 - [ ] **New CSS Color Functions**:
-  - `color(display-p3 1 0 0)`
-  - `color-mix(in srgb, red 50%, blue)`
+    - `color(display-p3 1 0 0)`
+    - `color-mix(in srgb, red 50%, blue)`
 
 ## 🔧 Installation
 
