@@ -1,24 +1,30 @@
-import Color from "./Color";
+import Color, { type Gamut } from "./Color";
+
+/**
+ * Determines the largest supported color space and syntax.
+ *
+ * @returns {{ space: string, useColorFunction: boolean }}
+ */
+function getSupportedColorSpace() {
+    if (!CSS.supports) {
+        return { space: "srgb", useColorFunction: false };
+    }
+
+    const colorSpaces = Color.getSupportedGamuts();
+    for (const space of colorSpaces) {
+        if (CSS.supports("background", `color(${space} 1 0 0)`)) {
+            return { space, useColorFunction: true };
+        }
+    }
+    return { space: "srgb", useColorFunction: CSS.supports("background", "color(srgb 1 0 0)") };
+}
 
 /**
  * Processes a text node to find and highlight color patterns within the text.
  *
- * This function searches for color patterns defined in the `Color.patterns` object within the text content
- * of the provided text node. It wraps the matched color patterns in a `<mark>` element with appropriate
- * styles and attributes. The function also adds a click event listener to the `<mark>` elements to allow
- * cycling through different color representations.
- *
- * @param textNode - The text node to process and highlight color patterns within.
- *
- * @remarks
- * The function performs the following steps:
- * 1. Extracts the text content from the provided text node.
- * 2. Searches for color patterns within the text using regular expressions.
- * 3. Wraps matched color patterns in `<mark>` elements with styles and attributes.
- * 4. Adds a click event listener to the `<mark>` elements to cycle through color representations.
- * 5. Replaces the original text node with a document fragment containing the processed content.
+ * @param textNode - The text node to process.
  */
-function processTextNode(textNode: Text, modern = false) {
+function processTextNode(textNode: Text, options = { modern: false, includeGamuts: false }) {
     const text = textNode.nodeValue;
     if (!text) return;
 
@@ -48,6 +54,8 @@ function processTextNode(textNode: Text, modern = false) {
     const fragment = document.createDocumentFragment();
     let lastIndex = 0;
 
+    const { space: supportedColorSpace, useColorFunction } = getSupportedColorSpace();
+
     for (const { start, end, matchText } of matches) {
         if (start < lastIndex) continue;
 
@@ -57,24 +65,27 @@ function processTextNode(textNode: Text, modern = false) {
 
         const wrapper = document.createElement("mark");
         const colorString = matchText.trim();
-        const bgColor = Color.from(colorString).to("xyz") as string;
+        const color = Color.from(colorString);
+
+        const xyzColor = color.to("xyz");
+        const displayColor = useColorFunction ? color.to(supportedColorSpace as Gamut) : color.to("rgb");
         const isNamedColor = colorPatterns.named.test(matchText);
 
-        const pageBgColor = (function () {
+        const pageBgColor = (() => {
             const bodyBgColor = window.getComputedStyle(document.body).backgroundColor;
             if (Color.from(bodyBgColor).equals("transparent")) return "#fff";
             return bodyBgColor;
         })();
 
-        wrapper.style.background = bgColor;
-        wrapper.style.color = Color.from(bgColor).isDark(pageBgColor) ? "#fff" : "#000";
-        wrapper.style.border = `2px solid ${bgColor.startsWith("rgba") ? bgColor.replace(/[^,]+(?=\))/, "1") : bgColor}`;
+        wrapper.style.background = displayColor;
+        wrapper.style.color = color.isDark(pageBgColor) ? "#fff" : "#000";
+        wrapper.style.border = `2px solid ${displayColor.startsWith("rgba") ? displayColor.replace(/[^,]+(?=\))/, "1") : displayColor}`;
         wrapper.style.borderRadius = "3px";
         wrapper.style.padding = "0 3px";
         wrapper.style.cursor = "pointer";
         wrapper.textContent = matchText;
 
-        wrapper.setAttribute("data-csspectrum-color", bgColor);
+        wrapper.setAttribute("data-csspectrum-color", xyzColor);
         if (isNamedColor) {
             wrapper.setAttribute("data-csspectrum-name", matchText);
         }
@@ -85,14 +96,19 @@ function processTextNode(textNode: Text, modern = false) {
             }
 
             let nextColor;
-
             const originalNamedColor = wrapper.getAttribute("data-csspectrum-name") || undefined;
             const currentColor = wrapper.getAttribute("data-csspectrum-color") || "";
 
             if (originalNamedColor) {
-                nextColor = Color.from(originalNamedColor).toNextColor(wrapper.textContent as string, { modern });
+                nextColor = Color.from(originalNamedColor).toNextColor(wrapper.textContent as string, {
+                    modern: options.modern,
+                    exclude: options.includeGamuts ? [] : [...Color.getSupportedGamuts()],
+                });
             } else {
-                nextColor = Color.from(currentColor).toNextColor(wrapper.textContent as string, { modern });
+                nextColor = Color.from(currentColor).toNextColor(wrapper.textContent as string, {
+                    modern: options.modern,
+                    exclude: options.includeGamuts ? [] : [...Color.getSupportedGamuts()],
+                });
             }
 
             wrapper.textContent = nextColor as string;
@@ -110,29 +126,28 @@ function processTextNode(textNode: Text, modern = false) {
 }
 
 /**
- * Processes a DOM node recursively. If the node is a text node, it processes the text content.
- * If the node is an element node, it recursively processes its child nodes, excluding certain tags.
+ * Processes a DOM node recursively.
  *
  * @param node - The DOM node to process.
- * @returns A promise that resolves once the node and its children have been processed.
+ * @returns A promise that resolves once processing is complete.
  */
-async function processNode(node: Node, modern: boolean): Promise<void> {
+async function processNode(node: Node, options = { modern: false, includeGamuts: false }): Promise<void> {
     if (node.nodeType === Node.TEXT_NODE) {
-        processTextNode(node as Text, modern);
+        processTextNode(node as Text, options);
     } else if (node.nodeType === Node.ELEMENT_NODE) {
         const excludedTags = ["SCRIPT", "STYLE", "NOSCRIPT", "SVG"];
         if (!excludedTags.includes((node as Element).tagName)) {
             for (const child of Array.from(node.childNodes)) {
-                await processNode(child, modern);
+                await processNode(child, options);
             }
         }
     }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    chrome.storage.sync.get({ enabled: true, modern: false }, (result) => {
+    chrome.storage.sync.get({ enabled: true, modern: false, includeGamuts: false }, (result) => {
         if (result.enabled) {
-            processNode(document.body, result.modern);
+            processNode(document.body, { modern: result.modern, includeGamuts: result.includeGamuts });
         }
     });
 });
@@ -141,14 +156,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "sync") {
         const newEnabled = changes.enabled ? changes.enabled.newValue : null;
         const newModern = changes.modern ? changes.modern.newValue : null;
+        const newIncludeGamuts = changes.includeGamuts ? changes.includeGamuts.newValue : null;
 
         if (newEnabled !== null) {
             if (newEnabled) {
-                processNode(document.body, newModern);
+                processNode(document.body, { modern: newModern, includeGamuts: newIncludeGamuts });
             } else {
                 window.location.reload();
             }
         } else if (newModern !== null) {
+            window.location.reload();
+        } else if (newIncludeGamuts !== null) {
             window.location.reload();
         }
     }

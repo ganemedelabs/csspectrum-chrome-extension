@@ -32,6 +32,19 @@
             </div>
         </div>
 
+        <div class="toggle-container">
+            <label for="includeGamutsToggle" class="toggle-label">
+                Include gamuts in the color cycle
+                <div class="toggle" role="switch" aria-checked="false">
+                    <input type="checkbox" id="includeGamutsToggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+            <div style="opacity: 0.8; line-height: 1.3rem">
+                e.g., <code>color(srgb 0.999 0.844 0.000)</code> and <code>color(display-p3 0.405 0.356 0.777)</code>
+            </div>
+        </div>
+
         <div id="toggle-description" class="info-box" role="region">
             <p><strong>Tip:</strong> Click on a highlighted color to convert it to the next format.</p>
             <p>
