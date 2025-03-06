@@ -6,7 +6,7 @@ describe("Color", () => {
     });
 
     it("should correctly identify HEX color format", () => {
-        expect(Color.type("#FF5733")).toBe("hex");
+        expect(Color.type("#ff5733")).toBe("hex");
     });
 
     it("should correctly identify RGB color format", () => {
@@ -22,7 +22,7 @@ describe("Color", () => {
     });
 
     it("should convert HEX to RGB", () => {
-        expect(Color.from("#FF5733").to("rgb")).toBe("rgb(255, 87, 51)");
+        expect(Color.from("#ff5733").to("rgb")).toBe("rgb(255, 87, 51)");
     });
 
     it("should convert named color to RGB", () => {
@@ -35,14 +35,14 @@ describe("Color", () => {
     });
 
     it("should calculate contrast ratio correctly", () => {
-        expect(Color.contrastRatio("#FFFFFF", "#000000")).toBeCloseTo(21);
+        expect(Color.contrastRatio("#ffffff", "#000000")).toBeCloseTo(21);
     });
 
     it("should determine if a color pair is accessible", () => {
-        expect(Color.isAccessiblePair("#FFFFFF", "#000000", "AA")).toBe(true);
-        expect(Color.isAccessiblePair("#FFFFFF", "#CCCCCC", "AAA")).toBe(false);
-        expect(Color.isAccessiblePair("#FFFFFF", "#000000", "AA", true)).toBe(true);
-        expect(Color.isAccessiblePair("#FFFFFF", "#CCCCCC", "AAA", true)).toBe(false);
+        expect(Color.isAccessiblePair("#ffffff", "#000000", "AA")).toBe(true);
+        expect(Color.isAccessiblePair("#ffffff", "#cccccc", "AAA")).toBe(false);
+        expect(Color.isAccessiblePair("#ffffff", "#000000", "AA", true)).toBe(true);
+        expect(Color.isAccessiblePair("#ffffff", "#cccccc", "AAA", true)).toBe(false);
     });
 
     it("should determine if a color is dark", () => {
@@ -129,7 +129,7 @@ describe("Color", () => {
     });
 
     it("should change alpha correctly", () => {
-        expect(Color.from("#FF5733").in("rgb").set({ alpha: 0.5 }).to("rgb")).toBe("rgba(255, 87, 51, 0.5)");
+        expect(Color.from("#ff5733").in("rgb").set({ alpha: 0.5 }).to("rgb")).toBe("rgba(255, 87, 51, 0.5)");
     });
 
     it("should change red channel correctly", () => {
@@ -150,13 +150,13 @@ describe("Color", () => {
     });
 
     it("should clone a color correctly", () => {
-        const color = Color.from("#FF5733");
+        const color = Color.from("#ff5733");
         const clone = color.clone();
         expect(clone.to("rgb")).toBe("rgb(255, 87, 51)");
     });
 
     it("should check color equality correctly", () => {
-        expect(Color.from("#FF5733").equals("rgb(255, 87, 51)")).toBe(true);
+        expect(Color.from("#ff5733").equals("rgb(255, 87, 51)")).toBe(true);
     });
 
     it("should return true if a color is cool", () => {
@@ -186,7 +186,7 @@ describe("Color", () => {
         expect(hsl).toBe("hsl(260, 100%, 50%)");
     });
 
-    it("should retrieve all the components from a color space", () => {
+    it("should retrieve all the components from a color model", () => {
         const rgb = Color.from("rgb(0, 157, 255)").in("rgb").getAll();
         expect(rgb).toEqual({ red: 0, green: 157, blue: 255, alpha: 1 });
     });

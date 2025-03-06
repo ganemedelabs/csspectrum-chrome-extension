@@ -19,6 +19,23 @@
 type XYZA = [number, number, number, number?];
 
 /**
+ * Represents the format type for color conversion.
+ */
+type Format = keyof typeof formatConverters;
+
+/**
+ * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
+ * but only if the converter is of type `ConverterWithComponents`.
+ */
+type Model = {
+    [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
+}[Format];
+
+type Space = keyof typeof spaces;
+
+type Name = keyof typeof namedColors;
+
+/**
  * Options for formatting output.
  */
 /**
@@ -42,7 +59,7 @@ type ToNextColorOptions = FormattingOptions & {
     /**
      * The colors to skip.
      */
-    exclude?: (Format | Gamut)[];
+    exclude?: (Format | Space)[];
 };
 
 /**
@@ -110,6 +127,8 @@ interface ConverterWithoutComponents {
      */
     pattern: RegExp;
 
+    model: string;
+
     /**
      * Converts a color string to an XYZA color space representation.
      *
@@ -136,19 +155,6 @@ type FormatConverters = {
 };
 
 /**
- * Represents the format type for color conversion.
- */
-type Format = keyof typeof formatConverters;
-
-/**
- * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
- * but only if the converter is of type `ConverterWithComponents`.
- */
-type Space = {
-    [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
-}[Format];
-
-/**
  * Extracts the names of the components from a type that has a `components` property.
  * The `components` property is expected to be a record where the keys are the component names
  * and the values are objects containing `index`, `min`, `max`, and optionally `loop` properties.
@@ -160,42 +166,42 @@ type ComponentNames<T> = T extends {
     : never;
 
 /**
- * Represents a component type for a given color space.
+ * Represents a component type for a given color model.
  *
- * @template S - The color space type.
+ * @template M - The color model type.
  */
-type Component<S extends Space> = (typeof formatConverters)[S] extends ConverterWithComponents
-    ? ComponentNames<(typeof formatConverters)[S]>
+type Component<M extends Model> = (typeof formatConverters)[M] extends ConverterWithComponents
+    ? ComponentNames<(typeof formatConverters)[M]>
     : never;
 
 /**
- * Represents operations that can be performed on a color in a specific color space.
+ * Represents operations that can be performed on a color in a specific color model.
  *
- * @template S - The color space type.
+ * @template M - The color model type.
  */
-type InSpace<S extends Space> = {
+type InModel<M extends Model> = {
     /**
-     * Retrieves the value of a specific component in the color space.
+     * Retrieves the value of a specific component in the color model.
      *
      * @param component - The component to retrieve the value for.
      * @returns The value of the specified component.
      */
-    get: (component: Component<S>) => number; // eslint-disable-line no-unused-vars
+    get: (component: Component<M>) => number; // eslint-disable-line no-unused-vars
 
     /**
-     * Retrieves all the values of the color space.
+     * Retrieves all the values of the color model.
      *
-     * @returns An object containing all the values of the color space.
+     * @returns An object containing all the values of the color model.
      */
     getAll: () => Record<string, number>;
 
     /**
-     * Sets the value of all components in the color space.
+     * Sets the value of all components in the color model.
      *
      * @param values - A rest parameter with one new value (or updater function) for each component.
      * @returns The updated color instance with added `.in()` methods.
      */
-    set: (values: Partial<{ [K in Component<S>]: number | ((prev: number) => number) }>) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
+    set: (values: Partial<{ [K in Component<M>]: number | ((prev: number) => number) }>) => Color & InModel<M>; // eslint-disable-line no-unused-vars
 
     /**
      * Mixes the current color with another color by a specified amount.
@@ -204,14 +210,14 @@ type InSpace<S extends Space> = {
      * @param amount - The amount to mix the other color in, typically a value between 0 and 1.
      * @returns The updated color instance with added `.in()` methods..
      */
-    mixWith: (color: string, amount: number) => Color & InSpace<S>; // eslint-disable-line no-unused-vars
+    mixWith: (color: string, amount: number) => Color & InModel<M>; // eslint-disable-line no-unused-vars
 };
 
-type InSpaceWithSetOnly<T> = {
+type InModelWithSetOnly<T> = {
     [K in keyof T as K extends `set${string}` ? K : never]: T[K];
 };
 
-type Gamuts = Record<
+type Spaces = Record<
     string,
     {
         toLinear: (c: number) => number; // eslint-disable-line no-unused-vars
@@ -221,11 +227,9 @@ type Gamuts = Record<
     }
 >;
 
-type Gamut = keyof typeof gamuts;
-
-type GamutConverters = {
+type SpaceConverters = {
     // eslint-disable-next-line no-unused-vars
-    [K in Gamut]: {
+    [K in Space]: {
         pattern: RegExp;
         toXYZA: (colorString: string) => XYZA; // eslint-disable-line no-unused-vars
         fromXYZA: (xyza: XYZA) => string; // eslint-disable-line no-unused-vars
@@ -235,7 +239,7 @@ type GamutConverters = {
 /**
  * A collection of named colors and their RGBA values.
  */
-const namedColors: { [named: string]: [number, number, number, number?] } = {
+const namedColors = {
     cornsilk: [255, 248, 220],
     blanchedalmond: [255, 235, 205],
     bisque: [255, 228, 196],
@@ -384,7 +388,7 @@ const namedColors: { [named: string]: [number, number, number, number?] } = {
     darkred: [139, 0, 0],
     rebeccapurple: [102, 51, 153],
     transparent: [0, 0, 0, 0],
-};
+} satisfies { [named: string]: [number, number, number, number?] };
 
 /**
  * A collection of color converters for various color formats.
@@ -432,17 +436,18 @@ const formatConverters = (() => {
             },
             toComponents: (rgb: string) => {
                 const convert = (value: string) =>
-                    value.includes("%") ? (parseFloat(value) / 100) * 255 : parseFloat(value);
+                    Math.round(value.includes("%") ? (parseFloat(value) / 100) * 255 : parseFloat(value));
 
-                const match = rgb.match(formatConverters.rgb.pattern) as RegExpMatchArray;
-                if (!match) {
+                const match = rgb.match(/\d*\.?\d+%?/g);
+                if (!match || match.length < 3) {
                     throw new Error(`Invalid RGB color format: ${rgb}`);
                 }
-                const r = convert(match[1]);
-                const g = convert(match[2]);
-                const b = convert(match[3]);
+
+                const r = convert(match[0]);
+                const g = convert(match[1]);
+                const b = convert(match[2]);
                 const a =
-                    match[4] != null ? (match[4].includes("%") ? parseFloat(match[4]) / 100 : parseFloat(match[4])) : 1;
+                    match[3] != null ? (match[3].includes("%") ? parseFloat(match[3]) / 100 : parseFloat(match[3])) : 1;
 
                 if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 1) {
                     throw new Error(`RGB values must be in [0, 255] and alpha in [0, 1]: ${rgb}`);
@@ -500,9 +505,10 @@ const formatConverters = (() => {
 
         named: {
             pattern: new RegExp(`^\\b(${Object.keys(namedColors).join("|")})\\b$`, "i"),
+            model: "rgb",
             toXYZA: (named: string): XYZA => {
                 const cleanedName = named.replace(/(?:\s+|-)/g, "").toLowerCase();
-                const rgb = namedColors[cleanedName];
+                const rgb = namedColors[cleanedName as Name];
 
                 if (!rgb) {
                     throw new Error(`Invalid named color: ${named}`);
@@ -532,6 +538,7 @@ const formatConverters = (() => {
 
         hex: {
             pattern: /^#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b$/,
+            model: "rgb",
             toXYZA: (hex: string): XYZA => {
                 const match = hex.match(formatConverters.hex.pattern);
                 if (!match) {
@@ -584,10 +591,10 @@ const formatConverters = (() => {
                 const bHex = toHex(clampedB);
 
                 if (a === 1) {
-                    return `#${rHex}${gHex}${bHex}`.toUpperCase();
+                    return `#${rHex}${gHex}${bHex}`;
                 } else {
                     const aHex = toHex(Math.round(a * 255));
-                    return `#${rHex}${gHex}${bHex}${aHex}`.toUpperCase();
+                    return `#${rHex}${gHex}${bHex}${aHex}`;
                 }
             },
         },
@@ -614,9 +621,9 @@ const formatConverters = (() => {
                 "i"
             ),
             components: {
-                hue: { index: 0, min: 0, max: 360, loop: true, step: 0.01 },
-                saturation: { index: 1, min: 0, max: 100, step: 0.01 },
-                lightness: { index: 2, min: 0, max: 100, step: 0.01 },
+                hue: { index: 0, min: 0, max: 360, loop: true, step: 1 },
+                saturation: { index: 1, min: 0, max: 100, step: 0.1 },
+                lightness: { index: 2, min: 0, max: 100, step: 0.1 },
                 alpha: { index: 3, min: 0, max: 1, step: 0.001 },
             },
             toComponents: (hslStr) => {
@@ -1349,7 +1356,7 @@ const formatConverters = (() => {
     };
 })() satisfies FormatConverters;
 
-const gamuts = (() => {
+const spaces = (() => {
     const identity = (c: number) => c;
 
     return {
@@ -1466,10 +1473,10 @@ const gamuts = (() => {
             ],
         },
     };
-})() satisfies Gamuts;
+})() satisfies Spaces;
 
-const gamutConverters = Object.fromEntries(
-    Object.entries(gamuts).map(([name, gamut]) => [
+const spaceConverters = Object.fromEntries(
+    Object.entries(spaces).map(([name, space]) => [
         name,
         {
             pattern: new RegExp(
@@ -1478,7 +1485,7 @@ const gamutConverters = Object.fromEntries(
             ),
 
             toXYZA: (colorString: string): XYZA => {
-                const match = colorString.match(gamutConverters[name as Gamut].pattern);
+                const match = colorString.match(spaceConverters[name as Space].pattern);
                 if (!match) {
                     throw new Error(`Invalid ${name} color: ${colorString}`);
                 }
@@ -1489,13 +1496,13 @@ const gamutConverters = Object.fromEntries(
                 const b = parseValue(match[3]);
                 const a = match[4] != null ? parseValue(match[4]) : 1;
 
-                const lr = gamut.toLinear(r);
-                const lg = gamut.toLinear(g);
-                const lb = gamut.toLinear(b);
+                const lr = space.toLinear(r);
+                const lg = space.toLinear(g);
+                const lb = space.toLinear(b);
 
-                const X = gamut.toXYZMatrix[0][0] * lr + gamut.toXYZMatrix[0][1] * lg + gamut.toXYZMatrix[0][2] * lb;
-                const Y = gamut.toXYZMatrix[1][0] * lr + gamut.toXYZMatrix[1][1] * lg + gamut.toXYZMatrix[1][2] * lb;
-                const Z = gamut.toXYZMatrix[2][0] * lr + gamut.toXYZMatrix[2][1] * lg + gamut.toXYZMatrix[2][2] * lb;
+                const X = space.toXYZMatrix[0][0] * lr + space.toXYZMatrix[0][1] * lg + space.toXYZMatrix[0][2] * lb;
+                const Y = space.toXYZMatrix[1][0] * lr + space.toXYZMatrix[1][1] * lg + space.toXYZMatrix[1][2] * lb;
+                const Z = space.toXYZMatrix[2][0] * lr + space.toXYZMatrix[2][1] * lg + space.toXYZMatrix[2][2] * lb;
 
                 return [X, Y, Z, a];
             },
@@ -1504,15 +1511,15 @@ const gamutConverters = Object.fromEntries(
                 const [X, Y, Z, a = 1] = xyza;
 
                 const lr =
-                    gamut.fromXYZMatrix[0][0] * X + gamut.fromXYZMatrix[0][1] * Y + gamut.fromXYZMatrix[0][2] * Z;
+                    space.fromXYZMatrix[0][0] * X + space.fromXYZMatrix[0][1] * Y + space.fromXYZMatrix[0][2] * Z;
                 const lg =
-                    gamut.fromXYZMatrix[1][0] * X + gamut.fromXYZMatrix[1][1] * Y + gamut.fromXYZMatrix[1][2] * Z;
+                    space.fromXYZMatrix[1][0] * X + space.fromXYZMatrix[1][1] * Y + space.fromXYZMatrix[1][2] * Z;
                 const lb =
-                    gamut.fromXYZMatrix[2][0] * X + gamut.fromXYZMatrix[2][1] * Y + gamut.fromXYZMatrix[2][2] * Z;
+                    space.fromXYZMatrix[2][0] * X + space.fromXYZMatrix[2][1] * Y + space.fromXYZMatrix[2][2] * Z;
 
-                const r = Math.max(0, Math.min(1, gamut.fromLinear(lr)));
-                const g = Math.max(0, Math.min(1, gamut.fromLinear(lg)));
-                const b = Math.max(0, Math.min(1, gamut.fromLinear(lb)));
+                const r = Math.max(0, Math.min(1, space.fromLinear(lr)));
+                const g = Math.max(0, Math.min(1, space.fromLinear(lg)));
+                const b = Math.max(0, Math.min(1, space.fromLinear(lb)));
 
                 const formatValue = (x: number) => x.toFixed(3);
                 const colorString =
@@ -1524,9 +1531,9 @@ const gamutConverters = Object.fromEntries(
             },
         },
     ])
-) as { [K in Gamut]: GamutConverters[K] };
+) as { [K in Space]: SpaceConverters[K] };
 
-const converters = { ...formatConverters, ...gamutConverters } satisfies GamutConverters & FormatConverters;
+const converters = { ...formatConverters, ...spaceConverters } satisfies SpaceConverters | FormatConverters;
 
 /**
  * The `Color` class represents a dynamic CSS color object, allowing for the manipulation
@@ -1592,9 +1599,9 @@ class Color {
      * A collection of regular expressions for parsing color strings.
      */
     // eslint-disable-next-line no-unused-vars
-    static patterns: { [K in Format | Gamut]: RegExp } = Object.fromEntries(
+    static patterns: { [K in Format | Space]: RegExp } = Object.fromEntries(
         Object.entries(converters).map(([key, value]) => [key, value.pattern])
-    ) as { [K in Format | Gamut]: RegExp }; // eslint-disable-line no-unused-vars
+    ) as { [K in Format | Space]: RegExp }; // eslint-disable-line no-unused-vars
 
     /**
      * ────────────────────────────────────────────────────────
@@ -1615,7 +1622,9 @@ class Color {
      * @param format - The optional format of the color string. If provided, the function will use the corresponding converter.
      * @returns A new `Color` instance.
      */
-    static from(color: string, format?: Format | Gamut) {
+    static from(color: Name, format?: Format | Space): Color; // eslint-disable-line no-unused-vars
+    static from(color: string, format?: Format | Space): Color; // eslint-disable-line no-unused-vars
+    static from(color: Name | string, format?: Format | Space) {
         if (format) {
             const converter = converters[format];
             if (!converter) {
@@ -1656,14 +1665,14 @@ class Color {
     }
 
     /**
-     * Defines a color from individual components in a color space.
+     * Defines a color from individual components in a color model.
      *
-     * @param space - The color space to create components from.
-     * @returns Set functions to define numbers for each component in the specified color space.
+     * @param model - The color model to create components from.
+     * @returns Set functions to define numbers for each component in the specified color model.
      */
-    static in<S extends Space>(space: S): InSpaceWithSetOnly<InSpace<S>> {
-        const result = new Color(0, 0, 0, 1).in(space);
-        return result as InSpaceWithSetOnly<InSpace<S>>;
+    static in<M extends Model>(model: M): InModelWithSetOnly<InModel<M>> {
+        const result = new Color(0, 0, 0, 1).in(model);
+        return result as InModelWithSetOnly<InModel<M>>;
     }
 
     /**
@@ -1678,10 +1687,10 @@ class Color {
      * @param color - The color string to be evaluated.
      * @returns The key corresponding to the matched color pattern.
      */
-    static type(color: string): Format | Gamut {
+    static type(color: string): Format | Space {
         for (const [key, pattern] of Object.entries(Color.patterns)) {
             if (pattern.test(color.trim())) {
-                return key as Format | Gamut;
+                return key as Format | Space;
             }
         }
         throw new Error(
@@ -1707,8 +1716,8 @@ class Color {
         return Array.from(Object.keys(formatConverters)) as Format[];
     }
 
-    static getSupportedGamuts() {
-        return Array.from(Object.keys(gamutConverters)) as Gamut[];
+    static getSupportedSpaces() {
+        return Array.from(Object.keys(spaceConverters)) as Space[];
     }
 
     /**
@@ -1747,7 +1756,7 @@ class Color {
      * @param type - The target format for the random color.
      * @returns A random color in the specified format.
      */
-    static random(type: Format | Gamut) {
+    static random(type: Format | Space) {
         if (type === "named") {
             return Object.keys(namedColors)[Math.floor(Math.random() * Object.keys(namedColors).length)];
         }
@@ -1763,7 +1772,7 @@ class Color {
      * @param value - The string value to be validated.
      * @returns Whether the value matches the pattern for the specified type.
      */
-    static isValid(type: Format | Gamut, value: string) {
+    static isValid(type: Format | Space, value: string) {
         return Color.patterns[type].test(value.trim());
     }
 
@@ -1786,7 +1795,7 @@ class Color {
      * @param options - Optional formatting options. Defaults to `{ modern: false }`.
      * @returns The color in the specified format.
      */
-    to(format: Format | Gamut, options: FormattingOptions = { modern: false }) {
+    to(format: Format | Space, options: FormattingOptions = { modern: false }) {
         const converter = converters[format];
         if (!converter) {
             throw new Error(
@@ -1831,10 +1840,11 @@ class Color {
      * @param format - The format to convert the color to.
      * @returns An array representing the color in the specified format.
      */
-    toArray(space: Space): number[] {
-        const converter = formatConverters[space];
+    // TODO: Include color spaces as well
+    toArray(model: Model): number[] {
+        const converter = formatConverters[model];
         if (!converter) {
-            throw new Error(`Unsupported color space: ${space}`);
+            throw new Error(`Unsupported color model: ${model}`);
         }
 
         const components = converter.fromXYZA(this.xyza);
@@ -1852,6 +1862,30 @@ class Color {
         });
 
         return processedComponents;
+    }
+
+    toAllFormats(): Record<Format, string> {
+        const formats = Object.keys(formatConverters) as Format[];
+
+        return formats.reduce(
+            (acc, format) => {
+                acc[format] = this.to(format);
+                return acc;
+            },
+            {} as Record<Format, string>
+        );
+    }
+
+    toAllSpaces(): Record<Space, string> {
+        const spaces = Object.keys(spaceConverters) as Space[];
+
+        return spaces.reduce(
+            (acc, space) => {
+                acc[space] = this.to(space);
+                return acc;
+            },
+            {} as Record<Space, string>
+        );
     }
 
     /**
@@ -1877,16 +1911,11 @@ class Color {
 
         const type = Color.type(currentColorString);
         const currentIndex = formats.lastIndexOf(type);
-
         const nextFormat = formats[(currentIndex + 1) % formats.length];
 
-        let nextColor: string;
+        const nextColor = this.to(nextFormat as Format | Space, options) as string;
 
-        if (nextFormat === "named" && this.name) {
-            nextColor = this.name;
-        } else {
-            nextColor = this.to(nextFormat as Format, options) as string;
-        }
+        console.log({ currentColorString, xyza: this.xyza, next: this.to(nextFormat as Format) });
 
         return nextColor;
     }
@@ -1898,24 +1927,24 @@ class Color {
      */
 
     /**
-     * Converts the current color to a specified color space and provides methods to get, set, and mix color components.
+     * Converts the current color to a specified color model and provides methods to get, set, and mix color components.
      *
-     * @param space - The target color space.
-     * @returns An object containing methods to get, set, and mix color components in the specified color space.
+     * @param model - The target color model.
+     * @returns An object containing methods to get, set, and mix color components in the specified color model.
      *
      * @example
      * ```typescript
      * Color.from("red")
-     *     .in("HSL")
-     *     .set("saturation", (s) => s += 20)
-     *     .to("RGB");
+     *     .in("hsl")
+     *     .set({ saturation: (s) => s += 20 })
+     *     .to("rgb");
      * ```
      */
-    in<S extends Space>(space: S): InSpace<S> {
-        const converter = formatConverters[space];
+    in<M extends Model>(model: M): InModel<M> {
+        const converter = formatConverters[model];
 
         if (!("components" in converter)) {
-            throw new Error(`Space ${space} does not have defined components.`);
+            throw new Error(`Model ${model} does not have defined components.`);
         }
 
         const clampValue = (value: number, min: number, max: number, step: number) => {
@@ -1923,7 +1952,7 @@ class Color {
             return Math.round(clamped / step) * step;
         };
 
-        const get = (component: Component<S>) => {
+        const get = (component: Component<M>) => {
             const colorArray = converter.fromXYZA(this.xyza);
             const { min, max, step, index } = converter.components[component as keyof typeof converter.components];
             return clampValue(colorArray[index], min, max, step);
@@ -1931,8 +1960,8 @@ class Color {
 
         const getAll = () => {
             const colorArray = converter.fromXYZA(this.xyza);
-            const compNames = Object.keys(converter.components) as Component<S>[];
-            const result: Record<Component<S>, number> = {} as Record<Component<S>, number>;
+            const compNames = Object.keys(converter.components) as Component<M>[];
+            const result: Record<Component<M>, number> = {} as Record<Component<M>, number>;
 
             compNames.forEach((comp) => {
                 const idx = converter.components[comp as keyof typeof converter.components].index;
@@ -1944,9 +1973,9 @@ class Color {
         };
 
         // eslint-disable-next-line no-unused-vars
-        const set = (values: Partial<{ [K in Component<S>]: number | ((prev: number) => number) }>) => {
+        const set = (values: Partial<{ [K in Component<M>]: number | ((prev: number) => number) }>) => {
             const colorArray = converter.fromXYZA(this.xyza);
-            const compNames = Object.keys(converter.components) as Component<S>[];
+            const compNames = Object.keys(converter.components) as Component<M>[];
             compNames.forEach((comp) => {
                 if (comp in values) {
                     const idx = converter.components[comp as keyof typeof converter.components].index;
@@ -1958,31 +1987,31 @@ class Color {
             });
             this.xyza = converter.toXYZA(colorArray);
             const clone = this.clone();
-            return Object.assign(clone, { ...clone.in(space) }) as typeof this & InSpace<S>;
+            return Object.assign(clone, { ...clone.in(model) }) as typeof this & InModel<M>;
         };
 
         const mixWith = (color: string, amount: number = 0.5) => {
             const t = Math.max(0, Math.min(amount, 1));
 
             const otherColor = Color.from(color);
-            const otherInterface = otherColor.in(space);
+            const otherInterface = otherColor.in(model);
             const components = converter.components;
 
             for (const component in components) {
                 if (Object.prototype.hasOwnProperty.call(components, component)) {
-                    const comp = component as Component<S>;
+                    const comp = component as Component<M>;
                     const currentValue = get(comp);
                     const otherValue = otherInterface.get(comp);
 
                     const mixedValue = currentValue * (1 - t) + otherValue * t;
                     set({ [comp]: mixedValue } as Partial<{
-                        [K in Component<S>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
+                        [K in Component<M>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
                     }>);
                 }
             }
 
             const clone = this.clone();
-            return Object.assign(clone, { ...this.in(space) }) as typeof this & InSpace<S>;
+            return Object.assign(clone, { ...this.in(model) }) as typeof this & InModel<M>;
         };
 
         return { get, getAll, set, mixWith };
@@ -2015,7 +2044,7 @@ class Color {
 
     /**
      * Determines if the color is considered cool.
-     * A color is considered cool if its hue (H) in the HSL color space
+     * A color is considered cool if its hue (H) in the HSL color model
      * is between 60 degrees and 300 degrees.
      *
      * @returns True if the color is cool, false otherwise.
@@ -2027,7 +2056,7 @@ class Color {
 
     /**
      * Determines if the color is considered warm.
-     * A color is considered warm if its hue (H) in the HSL color space
+     * A color is considered warm if its hue (H) in the HSL color model
      * is less than or equal to 60 degrees or greater than or equal to 300 degrees.
      *
      * @returns True if the color is warm, false otherwise.
@@ -2070,7 +2099,7 @@ class Color {
             return Y;
         }
 
-        const bgXYZ = gamutConverters.xyz.toXYZA(backgroundColor);
+        const bgXYZ = spaceConverters.xyz.toXYZA(backgroundColor);
         const blendedY = (1 - alpha) * bgXYZ[1] + alpha * Y;
 
         return blendedY;
@@ -2078,4 +2107,4 @@ class Color {
 }
 
 export default Color;
-export { Gamut, Format, Space };
+export { Space, Name, Format, Model };

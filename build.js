@@ -6,7 +6,7 @@
  * 2. Validates extension manifest existence
  * 3. Synchronizes versions between package.json and manifest.json
  * 4. Creates distribution directory if missing
- * 5. Executes Webpack build (with local/npx fallback)
+ * 5. Executes Webpack build
  * 6. Generates versioned ZIP archive of build artifacts
  * 7. Manages .gitignore entries for generated ZIP files
  *
@@ -153,12 +153,14 @@ function compareVersions(v1, v2) {
     process.stdout.write("🚀 Running webpack build...\n");
     let webpackOutput;
     try {
-        webpackOutput = execSync("webpack", { encoding: "utf8" });
-    } catch {
-        process.stderr.write("⚠️  Local webpack command failed, falling back to npx webpack\n");
-        webpackOutput = execSync("npx webpack", { encoding: "utf8" });
+        webpackOutput = execSync("webpack", { encoding: "utf8", stdio: ["inherit", "pipe", "pipe"] });
+        printWebpackOutput(webpackOutput);
+    } catch (error) {
+        const errorOutput = error.stderr || error.stdout || error.message;
+        printWebpackOutput(errorOutput);
+        console.error("❌ Webpack build failed.");
+        process.exit(1);
     }
-    printWebpackOutput(webpackOutput);
 
     if (versionChanged) {
         process.stdout.write(`📦 Creating ZIP archive: ${green}${zipFileName}${reset}\n`);

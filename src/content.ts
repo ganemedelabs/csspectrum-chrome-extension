@@ -1,4 +1,4 @@
-import Color, { type Gamut } from "./Color";
+import Color, { type Space } from "./Color";
 
 /**
  * Determines the largest supported color space and syntax.
@@ -10,7 +10,7 @@ function getSupportedColorSpace() {
         return { space: "srgb", useColorFunction: false };
     }
 
-    const colorSpaces = Color.getSupportedGamuts();
+    const colorSpaces = Color.getSupportedSpaces();
     for (const space of colorSpaces) {
         if (CSS.supports("background", `color(${space} 1 0 0)`)) {
             return { space, useColorFunction: true };
@@ -68,7 +68,7 @@ function processTextNode(textNode: Text, options = { modern: false, includeGamut
         const color = Color.from(colorString);
 
         const xyzColor = color.to("xyz");
-        const displayColor = useColorFunction ? color.to(supportedColorSpace as Gamut) : color.to("rgb");
+        const displayColor = useColorFunction ? color.to(supportedColorSpace as Space) : color.to("rgb");
         const isNamedColor = colorPatterns.named.test(matchText);
 
         const pageBgColor = (() => {
@@ -102,12 +102,12 @@ function processTextNode(textNode: Text, options = { modern: false, includeGamut
             if (originalNamedColor) {
                 nextColor = Color.from(originalNamedColor).toNextColor(wrapper.textContent as string, {
                     modern: options.modern,
-                    exclude: options.includeGamuts ? [] : [...Color.getSupportedGamuts()],
+                    exclude: options.includeGamuts ? [] : [...Color.getSupportedSpaces()],
                 });
             } else {
                 nextColor = Color.from(currentColor).toNextColor(wrapper.textContent as string, {
                     modern: options.modern,
-                    exclude: options.includeGamuts ? [] : [...Color.getSupportedGamuts()],
+                    exclude: options.includeGamuts ? [] : [...Color.getSupportedSpaces()],
                 });
             }
 
