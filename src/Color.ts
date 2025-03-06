@@ -387,6 +387,7 @@ const namedColors = {
     red: [255, 0, 0],
     darkred: [139, 0, 0],
     rebeccapurple: [102, 51, 153],
+    darkgoldenrod: [184, 134, 11],
     transparent: [0, 0, 0, 0],
 } satisfies { [named: string]: [number, number, number, number?] };
 
@@ -1252,18 +1253,18 @@ const formatConverters = (() => {
                 alpha: { index: 3, min: 0, max: 1, step: 0.00001 },
             },
             toComponents: (oklchStr: string): number[] => {
-                const parseComponent = (value: string, name: string, isPercentage: boolean) => {
-                    if (value === "none") throw new Error(`'none' not supported for ${name}`);
+                const parseComponent = (value: string) => {
+                    if (value === "none") return NaN;
+                    const isPercentage = value.endsWith("%");
                     const num = parseFloat(value);
                     if (isPercentage) {
-                        if (num < 0 || num > 100) throw new Error(`${name} must be 0-100%`);
                         return num / 100;
                     }
-                    if (num < 0) throw new Error(`${name} must be non-negative`);
                     return num;
                 };
 
                 const parseAngle = (value: string) => {
+                    if (value === "none") return NaN;
                     const match = value.match(/^(-?\d*\.?\d+)(deg|rad|grad|turn)?$/);
                     if (!match) throw new Error(`Invalid angle: ${value}`);
                     let num = parseFloat(match[1]);
@@ -1286,19 +1287,26 @@ const formatConverters = (() => {
                 const match = oklchStr.match(formatConverters.oklch.pattern);
                 if (!match) throw new Error(`Invalid OKLCH format: ${oklchStr}`);
 
-                const L = parseComponent(match[1], "lightness", true);
-                const C = parseComponent(match[2], "chroma", false);
+                const L = parseComponent(match[1]);
+                const C = parseComponent(match[2]);
                 const h = parseAngle(match[3]);
+                /* eslint-disable indent */
                 const alpha = match[4]
-                    ? match[4].endsWith("%")
-                        ? parseFloat(match[4]) / 100
-                        : parseFloat(match[4])
+                    ? match[4] === "none"
+                        ? NaN
+                        : match[4].endsWith("%")
+                          ? parseFloat(match[4]) / 100
+                          : parseFloat(match[4])
                     : 1;
+                /* eslint-enable indent */
 
-                if (alpha < 0 || alpha > 1) throw new Error(`Alpha must be 0-1: ${match[4]}`);
+                if (!isNaN(alpha) && (alpha < 0 || alpha > 1)) {
+                    throw new Error(`Alpha must be 0-1: ${match[4]}`);
+                }
 
                 return [L, C, h, alpha];
             },
+
             toXYZA: (oklchComponents: number[]): XYZA => {
                 const [L, C, h, alpha = 1] = oklchComponents;
                 const hRad = (h * Math.PI) / 180;
@@ -1358,6 +1366,11 @@ const formatConverters = (() => {
 
 const spaces = (() => {
     const identity = (c: number) => c;
+    const identityMatrix = [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+    ];
 
     return {
         srgb: {
@@ -1458,19 +1471,33 @@ const spaces = (() => {
             ],
         },
 
-        xyz: {
+        "xyz-d65": {
+            toLinear: identity,
+            fromLinear: identity,
+            toXYZMatrix: identityMatrix,
+            fromXYZMatrix: identityMatrix,
+        },
+
+        "xyz-d50": {
             toLinear: identity,
             fromLinear: identity,
             toXYZMatrix: [
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
+                [0.9555766, -0.0230393, 0.0631636],
+                [-0.0282895, 1.0099416, 0.0210077],
+                [0.0122982, -0.020483, 1.3299098],
             ],
             fromXYZMatrix: [
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
+                [1.0478112, 0.0228866, -0.050127],
+                [0.0295424, 0.9904844, -0.0170491],
+                [-0.0092345, 0.0150436, 0.7521316],
             ],
+        },
+
+        xyz: {
+            toLinear: identity,
+            fromLinear: identity,
+            toXYZMatrix: identityMatrix,
+            fromXYZMatrix: identityMatrix,
         },
     };
 })() satisfies Spaces;
@@ -1485,7 +1512,9 @@ const spaceConverters = Object.fromEntries(
             ),
 
             toXYZA: (colorString: string): XYZA => {
-                const match = colorString.match(spaceConverters[name as Space].pattern);
+                const type = Color.type(colorString);
+                const pattern = converters[type].pattern;
+                const match = colorString.match(pattern);
                 if (!match) {
                     throw new Error(`Invalid ${name} color: ${colorString}`);
                 }
@@ -1521,11 +1550,7 @@ const spaceConverters = Object.fromEntries(
                 const g = Math.max(0, Math.min(1, space.fromLinear(lg)));
                 const b = Math.max(0, Math.min(1, space.fromLinear(lb)));
 
-                const formatValue = (x: number) => x.toFixed(3);
-                const colorString =
-                    a === 1
-                        ? `color(${name} ${formatValue(r)} ${formatValue(g)} ${formatValue(b)})`
-                        : `color(${name} ${formatValue(r)} ${formatValue(g)} ${formatValue(b)} / ${formatValue(a)})`;
+                const colorString = a === 1 ? `color(${name} ${r} ${g} ${b})` : `color(${name} ${r} ${g} ${b} / ${a})`;
 
                 return colorString;
             },
@@ -1914,8 +1939,6 @@ class Color {
         const nextFormat = formats[(currentIndex + 1) % formats.length];
 
         const nextColor = this.to(nextFormat as Format | Space, options) as string;
-
-        console.log({ currentColorString, xyza: this.xyza, next: this.to(nextFormat as Format) });
 
         return nextColor;
     }
