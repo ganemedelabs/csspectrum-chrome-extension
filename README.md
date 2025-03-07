@@ -29,6 +29,7 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     - LCH (e.g., `lch(50% 30 270)`)
     - Oklab (e.g., `oklab(50% 0.1 -0.2)`)
     - Oklch (e.g., `oklch(50% 0.1 270)`)
+    - `color()` spaces (e.g., `color(srgb 1 1 1)`, `color(display-p3 1 1 1)`)
 
 - **Interactive Color Conversion**: Clicking on a highlighted color string cycles it through different formats:
 
@@ -43,6 +44,9 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     9. Oklch
     10. Back to the original format
 
+> [!NOTE]  
+> You can enable **"Include color spaces in the cycle"** to cycle through additional color spaces as well, including **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.  
+
 ## 📅 Upcoming Support
 
 CSSpectrum will soon support additional **CSS color models**, including:
@@ -53,14 +57,11 @@ CSSpectrum will soon support additional **CSS color models**, including:
     - `hwb(from green h w b / 0.5)`
     - `lch(from blue calc(l + 20) c h)`
 
-- [ ] **CSS Variables**:
-
-    - `var(--my-color)`
-    - `rgb(255, var(--green-value), 51)`
-
 - [ ] **New CSS Color Functions**:
-    - `color(display-p3 1 0 0)`
-    - `color-mix(in srgb, red 50%, blue)`
+
+    - `color-mix(in hsl, hsl(200 50 80), coral 80%)`
+    - `color-mix(in lch longer hue, hsl(200deg 50% 80%), coral)`
+    - `color-mix(in srgb, plum, #f00)`
 
 ## 🔧 Installation
 
