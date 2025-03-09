@@ -16,24 +16,26 @@
 /**
  * Represents a color in the CIE 1931 XYZ color space with an optional alpha channel.
  */
-type XYZA = [number, number, number, number?];
+export type XYZA = [number, number, number, number?];
+
+export type RGBA = [number, number, number, number?];
 
 /**
  * Represents the format type for color conversion.
  */
-type Format = keyof typeof formatConverters;
+export type Format = keyof typeof formatConverters;
 
 /**
  * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
  * but only if the converter is of type `ConverterWithComponents`.
  */
-type Model = {
+export type Model = {
     [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
 }[Format];
 
-type Space = keyof typeof spaces;
+export type Space = keyof typeof spaces;
 
-type Name = keyof typeof namedColors;
+export type Name = keyof typeof namedColors;
 
 /**
  * Options for formatting output.
@@ -41,7 +43,7 @@ type Name = keyof typeof namedColors;
 /**
  * Options for formatting color values.
  */
-type FormattingOptions = {
+export type FormattingOptions = {
     /**
      * Use modern color format for RGB and HSL (e.g., `rgb(255 0 0)` instead of `rgb(255, 0, 0)`, or `hsb(0 100% 50%)` instead of `hsb(0, 100%, 50%)`).
      */
@@ -55,7 +57,7 @@ type FormattingOptions = {
 /**
  * Options for generating the next color in a sequence.
  */
-type ToNextColorOptions = FormattingOptions & {
+export type ToNextColorOptions = FormattingOptions & {
     /**
      * The colors to skip.
      */
@@ -65,7 +67,7 @@ type ToNextColorOptions = FormattingOptions & {
 /**
  * Interface representing a color converter with components.
  */
-interface ConverterWithComponents {
+export interface ConverterWithComponents {
     /**
      * Regular expression pattern to match the color string.
      */
@@ -121,7 +123,7 @@ interface ConverterWithComponents {
 /**
  * Interface representing a color converter without components.
  */
-interface ConverterWithoutComponents {
+export interface ConverterWithoutComponents {
     /**
      * Regular expression pattern to match the color string.
      */
@@ -150,7 +152,7 @@ interface ConverterWithoutComponents {
  * Represents a collection of converters where the key is a string representing the type of converter,
  * and the value is either a `ConverterWithComponents` or a `ConverterWithoutComponents`.
  */
-type FormatConverters = {
+export type FormatConverters = {
     [type: string]: ConverterWithComponents | ConverterWithoutComponents;
 };
 
@@ -159,7 +161,7 @@ type FormatConverters = {
  * The `components` property is expected to be a record where the keys are the component names
  * and the values are objects containing `index`, `min`, `max`, and optionally `loop` properties.
  */
-type ComponentNames<T> = T extends {
+export type ComponentNames<T> = T extends {
     components: Record<infer N, { index: number; min: number; max: number; loop?: boolean; step: number }>;
 }
     ? N
@@ -170,7 +172,7 @@ type ComponentNames<T> = T extends {
  *
  * @template M - The color model type.
  */
-type Component<M extends Model> = (typeof formatConverters)[M] extends ConverterWithComponents
+export type Component<M extends Model> = (typeof formatConverters)[M] extends ConverterWithComponents
     ? ComponentNames<(typeof formatConverters)[M]>
     : never;
 
@@ -179,7 +181,7 @@ type Component<M extends Model> = (typeof formatConverters)[M] extends Converter
  *
  * @template M - The color model type.
  */
-type InModel<M extends Model> = {
+export type InModel<M extends Model> = {
     /**
      * Retrieves the value of a specific component in the color model.
      *
@@ -213,21 +215,20 @@ type InModel<M extends Model> = {
     mixWith: (color: string, amount: number) => Color & InModel<M>; // eslint-disable-line no-unused-vars
 };
 
-type InModelWithSetOnly<T> = {
+export type InModelWithSetOnly<T> = {
     [K in keyof T as K extends `set${string}` ? K : never]: T[K];
 };
 
-type Spaces = Record<
-    string,
-    {
-        toLinear: (c: number) => number; // eslint-disable-line no-unused-vars
-        fromLinear: (c: number) => number; // eslint-disable-line no-unused-vars
-        toXYZMatrix: number[][];
-        fromXYZMatrix: number[][];
-    }
->;
+export type Spaces = Record<string, SpaceMatrixMap>;
 
-type SpaceConverters = {
+export type SpaceMatrixMap = {
+    toLinear: (c: number) => number; // eslint-disable-line no-unused-vars
+    fromLinear: (c: number) => number; // eslint-disable-line no-unused-vars
+    toXYZMatrix: number[][];
+    fromXYZMatrix: number[][];
+};
+
+export type SpaceConverters = {
     // eslint-disable-next-line no-unused-vars
     [K in Space]: {
         pattern: RegExp;
@@ -389,7 +390,7 @@ const namedColors = {
     rebeccapurple: [102, 51, 153],
     darkgoldenrod: [184, 134, 11],
     transparent: [0, 0, 0, 0],
-} satisfies { [named: string]: [number, number, number, number?] };
+} satisfies { [named: string]: RGBA };
 
 /**
  * A collection of color converters for various color formats.
@@ -1706,6 +1707,24 @@ class Color {
      * ────────────────────────────────────────────────────────
      */
 
+    static registerNamedColor(name: string, rgba: RGBA) {
+        const cleanedName = name.replace(/(?:\s+|-)/g, "").toLowerCase();
+        if ((namedColors as Record<Name, RGBA>)[cleanedName as Name]) {
+            throw new Error(`Color name "${name}" is already registered.`);
+        }
+
+        (namedColors as Record<Name, RGBA>)[cleanedName as Name] = rgba;
+    }
+
+    static registerFormat(format: string, formatObject: ConverterWithComponents | ConverterWithoutComponents) {
+        (formatConverters as Record<Format, ConverterWithComponents | ConverterWithoutComponents>)[format as Format] =
+            formatObject;
+    }
+
+    static registerSpace(space: string, spaceObject: SpaceMatrixMap) {
+        (spaces as Record<Space, SpaceMatrixMap>)[space as Space] = spaceObject;
+    }
+
     /**
      * Determines the type of the given color string based on predefined patterns.
      *
@@ -2009,8 +2028,7 @@ class Color {
                 }
             });
             this.xyza = converter.toXYZA(colorArray);
-            const clone = this.clone();
-            return Object.assign(clone, { ...clone.in(model) }) as typeof this & InModel<M>;
+            return Object.assign(this, { ...this.in(model) }) as typeof this & InModel<M>;
         };
 
         const mixWith = (color: string, amount: number = 0.5) => {
@@ -2033,8 +2051,7 @@ class Color {
                 }
             }
 
-            const clone = this.clone();
-            return Object.assign(clone, { ...this.in(model) }) as typeof this & InModel<M>;
+            return Object.assign(this, { ...this.in(model) }) as typeof this & InModel<M>;
         };
 
         return { get, getAll, set, mixWith };
@@ -2045,15 +2062,6 @@ class Color {
      * Instance Utility Methods
      * ────────────────────────────────────────────────────────
      */
-
-    /**
-     * Creates a new instance of the Color class with the same RGBA values.
-     *
-     * @returns A new Color instance with identical RGBA values.
-     */
-    clone() {
-        return new Color(...this.xyza);
-    }
 
     /**
      * Compares the current color object with another color string.
@@ -2130,4 +2138,3 @@ class Color {
 }
 
 export default Color;
-export { Space, Name, Format, Model };

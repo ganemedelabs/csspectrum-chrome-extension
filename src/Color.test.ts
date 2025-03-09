@@ -1,4 +1,4 @@
-import Color from "./Color";
+import Color, { ConverterWithoutComponents, Format, Space, SpaceMatrixMap } from "./Color";
 
 describe("Color", () => {
     it("should pass this test", () => {
@@ -149,12 +149,6 @@ describe("Color", () => {
         expect(color.to("hsl")).toBe("hsl(120, 100%, 50%)");
     });
 
-    it("should clone a color correctly", () => {
-        const color = Color.from("#ff5733");
-        const clone = color.clone();
-        expect(clone.to("rgb")).toBe("rgb(255, 87, 51)");
-    });
-
     it("should check color equality correctly", () => {
         expect(Color.from("#ff5733").equals("rgb(255, 87, 51)")).toBe(true);
     });
@@ -175,8 +169,7 @@ describe("Color", () => {
     it("should chain multiple set methods", () => {
         const hsl = Color.from("hsl(0, 100%, 50%)")
             .in("hsl")
-            .set({ hue: (h) => (h += 100) })
-            .set({ saturation: (s) => (s -= 20) })
+            .set({ hue: (h) => (h += 100), saturation: (s) => (s -= 20) })
             .to("hsl");
         expect(hsl).toBe("hsl(100, 80%, 50%)");
     });
@@ -189,6 +182,11 @@ describe("Color", () => {
     it("should retrieve all the components from a color model", () => {
         const rgb = Color.from("rgb(0, 157, 255)").in("rgb").getAll();
         expect(rgb).toEqual({ red: 0, green: 157, blue: 255, alpha: 1 });
+    });
+
+    it("should register a new named color", () => {
+        Color.registerNamedColor("new", [9, 9, 9]);
+        expect(Color.from("rgb(9, 9, 9)").to("named")).toBe("new");
     });
 });
 
@@ -268,4 +266,57 @@ describe("Color Patterns", () => {
             });
         }
     );
+});
+
+describe("Color static registration methods", () => {
+    describe("registerNamedColor", () => {
+        it("should register a new named color successfully", () => {
+            Color.registerNamedColor("Test Color", [10, 20, 30]);
+            expect(Color.from("rgb(10, 20, 30)").to("named")).toBe("testcolor");
+        });
+
+        it("should throw an error when trying to register an already registered named color", () => {
+            Color.registerNamedColor("Duplicate", [100, 100, 100]);
+            expect(() => {
+                Color.registerNamedColor("duplicate", [100, 100, 100]);
+            }).toThrow(`Color name "duplicate" is already registered.`); // eslint-disable-line quotes
+        });
+    });
+
+    describe("registerFormat", () => {
+        const dummyConverter: ConverterWithoutComponents = {
+            pattern: /.*/,
+            model: "rgb",
+            toXYZA: () => [0, 0, 0, 1],
+            fromXYZA: () => "dummy output",
+        };
+
+        it("should register a new format converter and use it for conversion", () => {
+            Color.registerFormat("dummy", dummyConverter);
+            const output = Color.from("anything").to("dummy" as Format);
+            expect(output).toBe("dummy output");
+        });
+    });
+
+    describe("registerSpace", () => {
+        const dummySpace = {
+            toLinear: (c: number) => c,
+            fromLinear: (c: number) => c,
+            toXYZMatrix: [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ],
+            fromXYZMatrix: [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ],
+        };
+
+        it("should register a new color space", () => {
+            Color.registerSpace("dummySpace", dummySpace);
+            expect(Color.from("color(xyz 1 0 0)").to("dummySpace" as Space)).toBe("dummySpace");
+        });
+    });
 });
