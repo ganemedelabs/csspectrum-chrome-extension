@@ -19,7 +19,6 @@
 
 *::selection {
     background-color: var(--primary-color);
-    color: #fff;
 }
 
 body {
@@ -41,8 +40,6 @@ body {
     padding: 20px;
     width: 320px;
     text-align: left;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    border-radius: 12px;
 }
 
 h2 {
@@ -165,19 +162,25 @@ h2::after {
 }
 
 .toggle input:disabled + .toggle-slider {
-    background-color: var(--toggle-disabled-off);
+    background: var(--toggle-disabled-off);
     cursor: not-allowed;
     box-shadow: none;
     animation: none;
 }
 
 .toggle input:disabled:checked + .toggle-slider {
-    background-color: var(--toggle-disabled-on);
-    animation: none;
+    background: var(--toggle-disabled-on);
+    cursor: not-allowed;
+    box-shadow: none;
 }
 
 .toggle input:disabled + .toggle-slider:before {
-    background-color: var(--toggle-disabled-slider);
+    background: var(--toggle-disabled-slider);
+    box-shadow: none;
+}
+
+.toggle input:disabled:checked + .toggle-slider:before {
+    background: var(--toggle-disabled-slider);
     box-shadow: none;
 }
 
@@ -211,7 +214,6 @@ code {
     border-radius: 12px;
     font-size: 14px;
     line-height: 1.6;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Animation Definitions */

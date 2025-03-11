@@ -45,7 +45,7 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     10. Back to the original format
 
 > [!NOTE]  
-> You can enable **"Include color spaces in the cycle"** to cycle through additional color spaces as well, including **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.  
+> You can enable **"Include color spaces in the cycle"** to cycle through additional color spaces as well, including **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.
 
 ## 📅 Upcoming Support
 
