@@ -1,4 +1,4 @@
-import Color, { ConverterWithoutComponents, Format, Space } from "./Color";
+import Color from "./Color";
 
 describe("Color", () => {
     it("should pass this test", () => {

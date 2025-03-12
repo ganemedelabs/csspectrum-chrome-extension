@@ -31,9 +31,11 @@ export type Format = keyof typeof formatConverters;
  * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
  * but only if the converter is of type `ConverterWithComponents`.
  */
-export type Model = {
-    [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
-}[Format];
+export type Model =
+    | Space
+    | {
+          [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
+      }[Format];
 
 export type Space = keyof typeof spaces;
 
@@ -73,6 +75,12 @@ export type ComponentDefinition = {
     loop?: boolean;
     step?: number;
 };
+
+export type GetConverter<M extends Model> = M extends Space
+    ? (typeof spaces)[M]
+    : M extends Format
+      ? (typeof formatConverters)[M]
+      : never;
 
 /**
  * Interface representing a color converter with components.
@@ -161,14 +169,8 @@ export type ComponentNames<T> = T extends {
     ? N | "alpha"
     : never;
 
-/**
- * Represents a component type for a given color model.
- *
- * @template M - The color model type.
- */
-export type Component<M extends Model> = (typeof formatConverters)[M] extends ConverterWithComponents
-    ? ComponentNames<(typeof formatConverters)[M]>
-    : never;
+export type Component<M extends Model> =
+    GetConverter<M> extends { components: Record<infer N, ComponentDefinition> } ? N | "alpha" : never;
 
 /**
  * Represents operations that can be performed on a color in a specific color model.
@@ -228,11 +230,7 @@ export type SpaceMatrixMap = {
 };
 
 export type SpaceConverters = {
-    [K in Space]: {
-        pattern: RegExp;
-        toXYZA: (colorString: string) => XYZA;
-        fromXYZA: (xyza: XYZA) => string;
-    };
+    [K in Space]: ConverterWithComponents;
 };
 
 /* eslint-enable no-unused-vars */
@@ -1521,52 +1519,60 @@ const spaceConverters = Object.fromEntries(
                 "i"
             ),
 
-            toXYZA: (colorString: string): XYZA => {
-                const type = Color.type(colorString);
-                const pattern = converters[type].pattern;
+            components: (() => {
+                const comps = [...space.components, "alpha"];
+                return Object.fromEntries(comps.map((comp, index) => [comp, { index, min: 0, max: 1, precision: 7 }]));
+            })(),
+
+            toComponents: (colorString: string): number[] => {
+                const pattern = new RegExp(
+                    `^color\\(\\s*${name}\\s+([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+%?)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)$`,
+                    "i"
+                );
                 const match = colorString.match(pattern);
                 if (!match) {
                     throw new Error(`Invalid ${name} color: ${colorString}`);
                 }
-
                 const parseValue = (s: string) => (s.endsWith("%") ? parseFloat(s) / 100 : parseFloat(s));
-                const r = parseValue(match[1]);
-                const g = parseValue(match[2]);
-                const b = parseValue(match[3]);
-                const a = match[4] != null ? parseValue(match[4]) : 1;
+                const components = [1, 2, 3].map((i) => parseValue(match[i]));
+                const alpha = match[4] != null ? parseValue(match[4]) : 1;
+                return [...components, alpha];
+            },
 
+            fromComponents: (colorArray: number[]): string => {
+                const [comp1, comp2, comp3, alpha = 1] = colorArray;
+                const compStr = [comp1, comp2, comp3].map((c) => c).join(" ");
+                const alphaStr = alpha !== 1 ? ` / ${alpha}` : "";
+                return `color(${name} ${compStr}${alphaStr})`;
+            },
+
+            toXYZA: (colorArray: number[]): XYZA => {
+                const [r, g, b, a = 1] = colorArray;
                 const lr = space.toLinear(r);
                 const lg = space.toLinear(g);
                 const lb = space.toLinear(b);
-
                 const X = space.toXYZMatrix[0][0] * lr + space.toXYZMatrix[0][1] * lg + space.toXYZMatrix[0][2] * lb;
                 const Y = space.toXYZMatrix[1][0] * lr + space.toXYZMatrix[1][1] * lg + space.toXYZMatrix[1][2] * lb;
                 const Z = space.toXYZMatrix[2][0] * lr + space.toXYZMatrix[2][1] * lg + space.toXYZMatrix[2][2] * lb;
-
                 return [X, Y, Z, a];
             },
 
-            fromXYZA: (xyza: XYZA): string => {
+            fromXYZA: (xyza: XYZA): number[] => {
                 const [X, Y, Z, a = 1] = xyza;
-
                 const lr =
                     space.fromXYZMatrix[0][0] * X + space.fromXYZMatrix[0][1] * Y + space.fromXYZMatrix[0][2] * Z;
                 const lg =
                     space.fromXYZMatrix[1][0] * X + space.fromXYZMatrix[1][1] * Y + space.fromXYZMatrix[1][2] * Z;
                 const lb =
                     space.fromXYZMatrix[2][0] * X + space.fromXYZMatrix[2][1] * Y + space.fromXYZMatrix[2][2] * Z;
-
                 const r = Math.max(0, Math.min(1, space.fromLinear(lr)));
                 const g = Math.max(0, Math.min(1, space.fromLinear(lg)));
                 const b = Math.max(0, Math.min(1, space.fromLinear(lb)));
-
-                const colorString = a === 1 ? `color(${name} ${r} ${g} ${b})` : `color(${name} ${r} ${g} ${b} / ${a})`;
-
-                return colorString;
+                return [r, g, b, a];
             },
         },
     ])
-) as { [K in Space]: SpaceConverters[K] };
+) as unknown as { [K in Space]: SpaceConverters[K] };
 
 const converters = { ...formatConverters, ...spaceConverters } satisfies SpaceConverters | FormatConverters;
 
@@ -1734,25 +1740,6 @@ class Color {
         (spaces as Record<Space, SpaceMatrixMap>)[space as Space] = spaceObject;
     }
 
-    // console.log(Color.type("color(from red a98-rgb r g b)"));
-    // console.log(Color.type("color(from red a98-rgb r g b / alpha)"));
-    // console.log(Color.type("color(from red xyz-d50 x y z)"));
-    // console.log(Color.type("color(from red xyz-d50 x y z / alpha)"));
-    // console.log(Color.type("hsl(from red h s l)"));
-    // console.log(Color.type("hsl(from red h s l / alpha)"));
-    // console.log(Color.type("hwb(from red h w b)"));
-    // console.log(Color.type("hwb(from red h w b / alpha)"));
-    // console.log(Color.type("lab(from red l a b)"));
-    // console.log(Color.type("lab(from red l a b / alpha)"));
-    // console.log(Color.type("lch(from red l c h)"));
-    // console.log(Color.type("lch(from red l c h / alpha)"));
-    // console.log(Color.type("oklab(from red l a b)"));
-    // console.log(Color.type("oklab(from red l a b / alpha)"));
-    // console.log(Color.type("oklch(from red l c h)"));
-    // console.log(Color.type("oklch(from red l c h / alpha)"));
-    // console.log(Color.type("rgb(from red r g b)"));
-    // console.log(Color.type("rgb(from red r g b / alpha)"));
-
     /**
      * Determines the type of the given color string based on predefined patterns.
      *
@@ -1822,6 +1809,146 @@ class Color {
         const randomChannel = () => Math.floor(Math.random() * 200 + 30);
         const randomColor = this.from(`rgb(${randomChannel()}, ${randomChannel()}, ${randomChannel()})`);
         return randomColor.to(type) as string;
+    }
+
+    static parseRelative(color: string) {
+        const parseComponent = <M extends Model>(component: string, baseColor: Color, model: M): number => {
+            console.log({
+                color,
+                component,
+                baseColor,
+                model,
+                parsed: (() => {
+                    if (/^-?\d*\.?\d+$/.test(component)) {
+                        return parseFloat(component);
+                    } else if (/^-?\d*\.?\d+%$/.test(component)) {
+                        return parseFloat(component.slice(0, -1)) / 100;
+                    } else if (component.startsWith("calc(") && component.endsWith(")")) {
+                        const expression = component.slice(5, -1).trim();
+                        return evaluateExpression(expression, baseColor, model);
+                    } else {
+                        return baseColor.in(model).get(component as Component<M>);
+                    }
+                })(),
+            });
+            if (/^-?\d*\.?\d+$/.test(component)) {
+                // Case 1: Pure number (e.g., "255" or "-10.5")
+                console.log("pure number");
+                return parseFloat(component);
+            } else if (/^-?\d*\.?\d+%$/.test(component)) {
+                // Case 2: Percentage (e.g., "50%" or "-25%")
+                console.log("percentage");
+                return parseFloat(component.slice(0, -1)) / 100;
+            } else if (component.startsWith("calc(") && component.endsWith(")")) {
+                // Case 3: calc() expression (e.g., "calc(r * 2)")
+                console.log("with calc");
+                const expression = component.slice(5, -1).trim();
+                return evaluateExpression(expression, baseColor, model);
+            } else {
+                // Case 4: Component name (e.g., "r", "g", "b")
+                console.log("component name: ", component, " ", model);
+                return baseColor.in(model).get(component as Component<M>);
+            }
+        };
+
+        const evaluateExpression = <M extends Model>(expression: string, baseColor: Color, model: M): number => {
+            const tokens = expression.split(/\s+/);
+            let value = 0;
+            let operator = "+";
+
+            for (const token of tokens) {
+                if (token === "+" || token === "-" || token === "*" || token === "/") {
+                    operator = token;
+                } else {
+                    let operand: number;
+                    if (/^-?\d*\.?\d+$/.test(token)) {
+                        operand = parseFloat(token);
+                    } else if (/^-?\d*\.?\d+%$/.test(token)) {
+                        operand = parseFloat(token.slice(0, -1)) / 100;
+                    } else {
+                        operand = baseColor.in(model).get(token as Component<M>);
+                    }
+
+                    if (operator === "+") value += operand;
+                    else if (operator === "-") value -= operand;
+                    else if (operator === "*") value *= operand;
+                    else if (operator === "/") value /= operand;
+                }
+            }
+            return value;
+        };
+
+        const funcNameMatch = color.match(/^(\w+)(?=\()/);
+        if (!funcNameMatch) throw new Error(`"${color}" is not a valid relative format.`);
+        const funcName = funcNameMatch[1];
+
+        let baseColorStr: string, type: string, componentsStr: string;
+
+        if (funcName === "color") {
+            const match = color.match(/^color\(from ([a-z0-9-]+) ([a-z0-9-]+) (.*)\)$/);
+            if (!match) throw new Error(`Invalid format for color(): "${color}"`);
+            baseColorStr = match[1];
+            type = match[2];
+            componentsStr = match[3];
+            if (!(type in spaceConverters))
+                throw new Error(
+                    `Invalid space for color(): ${type}\nSupported spaces are: ${Object.keys(spaceConverters).join(", ")}.`
+                );
+        } else {
+            const match = color.match(new RegExp(`^${funcName}\\(from (\\w+) (.*)\\)$`));
+            if (!match) throw new Error(`Invalid format for ${funcName}(): "${color}"`);
+            baseColorStr = match[1];
+            type = funcName;
+            componentsStr = match[2];
+            if (!(type in formatConverters))
+                throw new Error(
+                    `Invalid function name for relative format: ${type}\nSupported function names are: ${Object.keys(formatConverters).join(", ")}.`
+                );
+        }
+
+        const baseColor = Color.from(baseColorStr);
+
+        const tokens: string[] = [];
+        let currentToken = "";
+        let parenCount = 0;
+        let inCalc = false;
+
+        for (const char of componentsStr) {
+            if (char === " " && parenCount === 0) {
+                if (currentToken) {
+                    tokens.push(currentToken);
+                    currentToken = "";
+                }
+            } else {
+                currentToken += char;
+                if (currentToken === "calc(") inCalc = true;
+                if (inCalc) {
+                    if (char === "(") parenCount++;
+                    if (char === ")") parenCount--;
+                    if (parenCount === 0 && inCalc) {
+                        tokens.push(currentToken);
+                        currentToken = "";
+                        inCalc = false;
+                    }
+                }
+            }
+        }
+        if (currentToken) tokens.push(currentToken);
+
+        const components: number[] = [];
+        let i = 0;
+        while (components.length < 3 && i < tokens.length) {
+            components.push(parseComponent(tokens[i], baseColor, type as Model));
+            i++;
+        }
+        if (i < tokens.length && tokens[i] === "/") {
+            i++;
+            if (i < tokens.length) {
+                components.push(parseComponent(tokens[i], baseColor, type as Model));
+            }
+        }
+
+        return { funcName, baseColor: baseColorStr, type, components };
     }
 
     /**
@@ -2001,8 +2128,9 @@ class Color {
      *     .to("rgb");
      * ```
      */
+    // FIXME: It can't recognize spaces' components
     in<M extends Model>(model: M): InModel<M> {
-        const converter = formatConverters[model];
+        const converter = converters[model];
 
         if (!("components" in converter)) {
             throw new Error(`Model ${model} does not have defined components.`);
@@ -2174,7 +2302,7 @@ class Color {
             return Y;
         }
 
-        const bgXYZ = spaceConverters.xyz.toXYZA(backgroundColor);
+        const bgXYZ = Color.from(backgroundColor).in("xyz").getArray();
         const blendedY = (1 - alpha) * bgXYZ[1] + alpha * Y;
 
         return blendedY;
