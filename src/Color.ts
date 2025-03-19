@@ -17,151 +17,106 @@
 
 /**
  * Represents a color in the CIE 1931 XYZ color space with an optional alpha channel.
+ * Format: [X, Y, Z, alpha?]
  */
 export type XYZA = [number, number, number, number?];
 
+/**
+ * Represents a color in the RGBA color space with an optional alpha channel.
+ * Format: [red, green, blue, alpha?]
+ */
 export type RGBA = [number, number, number, number?];
 
-/**
- * Represents the format type for color conversion.
- */
 export type Format = keyof typeof formatConverters;
 
+export type Space = keyof typeof spaceConverters;
+
 /**
- * Represents a type that maps each `Format` to its corresponding key in the `converters` object,
- * but only if the converter is of type `ConverterWithComponents`.
+ * Represents a named color identifier, derived from the keys of the `namedColors` object.
+ * Examples might include 'red', 'blue', etc.
  */
-export type Model =
-    | Space
-    | {
-          [K in Format]: (typeof formatConverters)[K] extends ConverterWithComponents ? K : never;
-      }[Format];
-
-export type Space = keyof typeof spaces;
-
 export type Name = keyof typeof namedColors;
 
 /**
- * Options for formatting output.
+ * Represents a color model, which can be either a `Space` or a `Format` that has a converter with components.
+ * Filters `Format` to only include those with `ConverterWithComponents`.
  */
-/**
- * Options for formatting color values.
- */
-export type FormattingOptions = {
-    /**
-     * Use modern color format for RGB and HSL (e.g., `rgb(255 0 0)` instead of `rgb(255, 0, 0)`, or `hsb(0 100% 50%)` instead of `hsb(0, 100%, 50%)`).
-     */
-    modern?: boolean;
-    /**
-     * The number of decimal places in the output format values. If `undefined`, will fallback to the default precision of the color settings.
-     */
-    precision?: number;
-};
+export type Model = {
+    [K in Format | Space]: (typeof converters)[K] extends ConverterWithComponents ? K : never;
+}[Format | Space];
 
 /**
- * Options for generating the next color in a sequence.
+ * Defines the properties of a color component within a converter.
  */
-export type ToNextColorOptions = FormattingOptions & {
-    /**
-     * The colors to skip.
-     */
-    exclude?: (Format | Space)[];
-};
-
 export type ComponentDefinition = {
+    /** Position of the component in the color array */
     index: number;
+
+    /** Minimum allowed value */
     min: number;
+
+    /** Maximum allowed value */
     max: number;
+
+    /** Whether the value loops (e.g., hue in HSL) */
     loop?: boolean;
+
+    /** Incremental step size (optional) */
     step?: number;
 };
 
-export type GetConverter<M extends Model> = M extends Space
-    ? (typeof spaces)[M]
-    : M extends Format
-      ? (typeof formatConverters)[M]
-      : never;
-
 /**
- * Interface representing a color converter with components.
+ * Converter for color formats with components (e.g., RGB, HSL).
  */
 export interface ConverterWithComponents {
-    /**
-     * Regular expression pattern to match the color string.
-     */
+    /** Regular expression to match the color string format. */
     pattern: RegExp;
 
+    /** Component definitions for this format (e.g., 'r', 'g', 'b'). */
     components: Record<string, ComponentDefinition>;
 
-    /**
-     * Converts a color string to an array of component values.
-     *
-     * @param colorString - The color string to convert.
-     * @returns An array of component values.
-     */
+    /** Converts a color string to an array of component values. */
     toComponents: (colorString: string) => number[];
 
-    /**
-     * Converts an array of component values to a color string.
-     *
-     * @param colorArray - The array of component values to convert.
-     * @param options - Optional formatting options.
-     * @returns The color string.
-     */
+    /** Converts an array of component values to a color string. */
     fromComponents: (colorArray: number[], options?: FormattingOptions) => string;
 
-    /**
-     * Converts an array of component values to an XYZA color space.
-     *
-     * @param colorArray - The array of component values to convert.
-     * @returns The XYZA color space representation.
-     */
+    /** Converts component values to XYZA color space. */
     toXYZA: (colorArray: number[]) => XYZA;
 
-    /**
-     * Converts an XYZA color space representation to an array of component values.
-     *
-     * @param xyza - The XYZA color space representation to convert.
-     * @returns The array of component values.
-     */
+    /** Converts XYZA color space to component values. */
     fromXYZA: (xyza: XYZA) => number[];
 }
 
 /**
- * Interface representing a color converter without components.
+ * Converter for color formats without components (e.g., named colors or simple formats).
  */
 export interface ConverterWithoutComponents {
-    /**
-     * Regular expression pattern to match the color string.
-     */
+    /** Regular expression to match the color string format. */
     pattern: RegExp;
 
+    /** Identifier for the color model this converter applies to. */
     model: string;
 
-    /**
-     * Converts a color string to an XYZA color space representation.
-     *
-     * @param colorString - The color string to convert.
-     * @returns The XYZA color space representation.
-     */
+    /** Converts a color string directly to XYZA color space. */
     toXYZA: (colorString: string) => XYZA;
 
-    /**
-     * Converts an XYZA color space representation to a color string.
-     *
-     * @param xyza - The XYZA color space representation to convert.
-     * @returns The color string.
-     */
+    /** Converts XYZA color space directly to a color string. */
     fromXYZA: (xyza: XYZA) => string;
 }
 
 /**
- * Represents a collection of converters where the key is a string representing the type of converter,
- * and the value is either a `ConverterWithComponents` or a `ConverterWithoutComponents`.
+ * Union type for all possible color converters.
  */
-export type FormatConverters = {
-    [type: string]: ConverterWithComponents | ConverterWithoutComponents;
-};
+export type ColorConverter = ConverterWithComponents | ConverterWithoutComponents;
+
+/**
+ * Maps each `Format` to its corresponding converter.
+ * Keys are specific format strings (e.g., 'rgb', 'hsl'), values are converters.
+ */
+export interface Converters {
+    [key: string]: ColorConverter;
+}
 
 export type ComponentNames<T> = T extends {
     components: Record<infer N, ComponentDefinition>;
@@ -169,69 +124,88 @@ export type ComponentNames<T> = T extends {
     ? N | "alpha"
     : never;
 
-export type Component<M extends Model> =
-    GetConverter<M> extends { components: Record<infer N, ComponentDefinition> } ? N | "alpha" : never;
-
 /**
- * Represents operations that can be performed on a color in a specific color model.
+ * Represents a component type for a given color model.
  *
  * @template M - The color model type.
  */
-export type InModel<M extends Model> = {
-    /**
-     * Retrieves the value of a specific component in the color model.
-     *
-     * @param component - The component to retrieve the value for.
-     * @returns The value of the specified component.
-     */
+export type Component<M extends Model> = (typeof converters)[M] extends ConverterWithComponents
+    ? ComponentNames<(typeof converters)[M]>
+    : never;
+
+/**
+ * Defines operations on a color within a specific `Model`, enabling method chaining.
+ */
+export interface InModel<M extends Model> {
+    /** Gets the value of a specific component. */
     get: (component: Component<M>) => number;
 
-    /**
-     * Retrieves all the values of the color model.
-     *
-     * @returns An object containing all the values of the color model.
-     */
+    /** Gets all component values as an object. */
     getComponents: () => { [K in Component<M>]: number };
 
+    /** Gets all component values as an array. */
     getArray: () => number[];
 
-    /**
-     * Sets the value of all components in the color model.
-     *
-     * @param values - A rest parameter with one new value (or updater function) for each component.
-     * @returns The updated color instance with added `.in()` methods.
-     */
+    /** Sets component values using an object, supporting updater functions. */
     set: (values: Partial<{ [K in Component<M>]: number | ((prev: number) => number) }>) => Color & InModel<M>;
 
+    /** Sets component values using an array. */
     setArray: (array: number[]) => Color & InModel<M>;
 
-    /**
-     * Mixes the current color with another color by a specified amount.
-     *
-     * @param color - The color to mix with.
-     * @param amount - The amount to mix the other color in, typically a value between 0 and 1.
-     * @returns The updated color instance with added `.in()` methods..
-     */
+    /** Mixes this color with another by a specified amount. */
     mixWith: (color: string, amount: number) => Color & InModel<M>;
-};
+}
 
+/**
+ * Extracts only the `set` methods from a type, used for specific constraints.
+ */
 export type InModelWithSetOnly<T> = {
     [K in keyof T as K extends `set${string}` ? K : never]: T[K];
 };
 
-export type Spaces = Record<string, SpaceMatrixMap>;
+/**
+ * Options for formatting color output.
+ */
+export interface FormattingOptions {
+    /** Use modern syntax (e.g., `rgb(255 0 0)` vs `rgb(255, 0, 0)`). */
+    modern?: boolean;
 
+    /** Number of decimal places; falls back to default if undefined. */
+    precision?: number;
+}
+
+/**
+ * Options for generating the next color, extending formatting options.
+ */
+export type ToNextColorOptions = FormattingOptions & {
+    /** Color formats or spaces to exclude from the sequence. */
+    exclude?: (Format | Space)[];
+};
+
+/**
+ * Defines a color space’s transformation properties.
+ */
 export type SpaceMatrixMap = {
+    /** Names of components in this space. */
     components: string[];
+
+    /** Linearization function. */
     toLinear: (c: number) => number;
+
+    /** Inverse linearization. */
     fromLinear: (c: number) => number;
+
+    /** Matrix to convert to XYZ. */
     toXYZMatrix: number[][];
+
+    /** Matrix to convert from XYZ. */
     fromXYZMatrix: number[][];
 };
 
-export type SpaceConverters = {
-    [K in Space]: ConverterWithComponents;
-};
+/**
+ * Maps space identifiers to their matrix definitions.
+ */
+export type Spaces = Record<string, SpaceMatrixMap>;
 
 /* eslint-enable no-unused-vars */
 
@@ -390,11 +364,6 @@ const namedColors = {
     transparent: [0, 0, 0, 0],
 } satisfies { [named: string]: RGBA };
 
-/**
- * A collection of color converters for various color formats.
- * Each converter provides methods to convert to and from the XYZ color space,
- * as well as methods to convert to and from component arrays.
- */
 const formatConverters = (() => {
     const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
     const rgbNum = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|\\d{1,2})(?:\\.\\d+)?";
@@ -513,10 +482,10 @@ const formatConverters = (() => {
                     throw new Error(`Invalid named color: ${named}`);
                 }
 
-                return formatConverters.rgb.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
+                return converters.rgb.toXYZA([rgb[0], rgb[1], rgb[2], rgb[3] ?? 1]);
             },
             fromXYZA: (xyza: XYZA): string => {
-                const [r, g, b, a] = formatConverters.rgb.fromXYZA(xyza);
+                const [r, g, b, a] = converters.rgb.fromXYZA(xyza);
                 const clampedR = Math.max(0, Math.min(255, Math.round(r)));
                 const clampedG = Math.max(0, Math.min(255, Math.round(g)));
                 const clampedB = Math.max(0, Math.min(255, Math.round(b)));
@@ -539,7 +508,7 @@ const formatConverters = (() => {
             pattern: /^#(?:[A-Fa-f0-9]{3,4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b$/,
             model: "rgb",
             toXYZA: (hex: string): XYZA => {
-                const match = hex.match(formatConverters.hex.pattern);
+                const match = hex.match(converters.hex.pattern);
                 if (!match) {
                     throw new Error(`Invalid HEX color format: ${hex}`);
                 }
@@ -570,12 +539,12 @@ const formatConverters = (() => {
                     a = parseInt(HEX.slice(6, 8), 16) / 255;
                 }
 
-                const rgbArray = formatConverters.rgb.toComponents(`rgb(${r}, ${g}, ${b})`);
-                const [X, Y, Z] = formatConverters.rgb.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${r}, ${g}, ${b})`);
+                const [X, Y, Z] = converters.rgb.toXYZA(rgbArray);
                 return [X, Y, Z, a];
             },
             fromXYZA: (xyza: XYZA) => {
-                const [r, g, b, a] = formatConverters.rgb.fromXYZA(xyza);
+                const [r, g, b, a] = converters.rgb.fromXYZA(xyza);
                 const clampedR = Math.max(0, Math.min(255, Math.round(r)));
                 const clampedG = Math.max(0, Math.min(255, Math.round(g)));
                 const clampedB = Math.max(0, Math.min(255, Math.round(b)));
@@ -686,7 +655,7 @@ const formatConverters = (() => {
                 }
             },
             fromXYZA: (xyza: XYZA): number[] => {
-                const [r, g, b, a = 1] = formatConverters.rgb
+                const [r, g, b, a = 1] = converters.rgb
                     .fromXYZA(xyza)
                     .map((n) => Math.max(0, Math.min(255, Math.round(n))));
 
@@ -764,8 +733,8 @@ const formatConverters = (() => {
                 const red = (r1 + m) * 255;
                 const green = (g1 + m) * 255;
                 const blue = (b1 + m) * 255;
-                const rgbArray = formatConverters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
-                return formatConverters.rgb.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.rgb.toXYZA(rgbArray);
             },
         },
 
@@ -833,7 +802,7 @@ const formatConverters = (() => {
                 }
             },
             fromXYZA: (xyza: XYZA): number[] => {
-                const [r, g, b, a = 1] = formatConverters.rgb
+                const [r, g, b, a = 1] = converters.rgb
                     .fromXYZA(xyza)
                     .map((n) => Math.max(0, Math.min(255, Math.round(n))));
 
@@ -865,8 +834,8 @@ const formatConverters = (() => {
                 if (W + Bl >= 1) {
                     const gray = W / (W + Bl);
                     const c = gray * 255;
-                    const rgbArray = formatConverters.rgb.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
-                    return formatConverters.rgb.toXYZA(rgbArray);
+                    const rgbArray = converters.rgb.toComponents(`rgb(${c}, ${c}, ${c}, ${a})`);
+                    return converters.rgb.toXYZA(rgbArray);
                 }
 
                 let hue = h % 360;
@@ -906,8 +875,8 @@ const formatConverters = (() => {
                 const red = (r1 * (1 - W - Bl) + W) * 255;
                 const green = (g1 * (1 - W - Bl) + W) * 255;
                 const blue = (b1 * (1 - W - Bl) + W) * 255;
-                const rgbArray = formatConverters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
-                return formatConverters.rgb.toXYZA(rgbArray);
+                const rgbArray = converters.rgb.toComponents(`rgb(${red}, ${green}, ${blue}, ${a})`);
+                return converters.rgb.toXYZA(rgbArray);
             },
         },
 
@@ -938,7 +907,7 @@ const formatConverters = (() => {
                 b: { index: 2, min: -Infinity, max: Infinity, step: 0.001 },
             },
             toComponents: (labStr: string): number[] => {
-                const match = labStr.match(formatConverters.lab.pattern);
+                const match = labStr.match(converters.lab.pattern);
                 if (!match) {
                     throw new Error(`Invalid LAB color format: ${labStr}`);
                 }
@@ -995,12 +964,21 @@ const formatConverters = (() => {
             },
             fromComponents: (labArray: number[]) => {
                 const [L, A, B, a = 1] = labArray;
-                const precision = 2;
+
+                const getPrecision = (step: number) => {
+                    const stepStr = step.toString();
+                    return stepStr.includes(".") ? stepStr.split(".")[1].length : 0;
+                };
+
+                const lPrecision = getPrecision(converters.lab.components.l.step);
+                const aPrecision = getPrecision(converters.lab.components.a.step);
+                const bPrecision = getPrecision(converters.lab.components.b.step);
+
                 if (a === 1) {
-                    return `lab(${L.toFixed(precision)}% ${A.toFixed(precision)} ${B.toFixed(precision)})`;
+                    return `lab(${L.toFixed(lPrecision)}% ${A.toFixed(aPrecision)} ${B.toFixed(bPrecision)})`;
                 } else {
                     const alphaPercentage = Math.round(a * 100);
-                    return `lab(${L.toFixed(precision)}% ${A.toFixed(precision)} ${B.toFixed(precision)} / ${alphaPercentage}%)`;
+                    return `lab(${L.toFixed(lPrecision)}% ${A.toFixed(aPrecision)} ${B.toFixed(bPrecision)} / ${alphaPercentage}%)`;
                 }
             },
         },
@@ -1032,7 +1010,7 @@ const formatConverters = (() => {
                 h: { index: 2, min: 0, max: 360, loop: true, step: 0.001 },
             },
             toComponents: (lchStr: string): number[] => {
-                const match = lchStr.match(formatConverters.lch.pattern);
+                const match = lchStr.match(converters.lch.pattern);
                 if (!match) {
                     throw new Error(`Invalid LCH color format: ${lchStr}`);
                 }
@@ -1095,14 +1073,23 @@ const formatConverters = (() => {
                 if (H < 0) H += 360;
                 return [L, C, H, alpha];
             },
-            fromComponents: (lchArray: number[]): string => {
+            fromComponents: (lchArray: number[]) => {
                 const [L, C, H, a = 1] = lchArray;
-                const precision = 2;
+
+                const getPrecision = (step: number) => {
+                    const stepStr = step.toString();
+                    return stepStr.includes(".") ? stepStr.split(".")[1].length : 0;
+                };
+
+                const lPrecision = getPrecision(converters.lch.components.l.step);
+                const cPrecision = getPrecision(converters.lch.components.c.step);
+                const hPrecision = getPrecision(converters.lch.components.h.step);
+
                 if (a === 1) {
-                    return `lch(${L.toFixed(precision)}% ${C.toFixed(precision)} ${H.toFixed(precision)})`;
+                    return `lch(${L.toFixed(lPrecision)}% ${C.toFixed(cPrecision)} ${H.toFixed(hPrecision)})`;
                 } else {
                     const alphaPercentage = Math.round(a * 100);
-                    return `lch(${L.toFixed(precision)}% ${C.toFixed(precision)} ${H.toFixed(precision)} / ${alphaPercentage}%)`;
+                    return `lch(${L.toFixed(lPrecision)}% ${C.toFixed(cPrecision)} ${H.toFixed(hPrecision)} / ${alphaPercentage}%)`;
                 }
             },
         },
@@ -1144,7 +1131,7 @@ const formatConverters = (() => {
                     return num;
                 };
 
-                const match = oklabStr.match(formatConverters.oklab.pattern);
+                const match = oklabStr.match(converters.oklab.pattern);
                 if (!match) throw new Error(`Invalid OKLab format: ${oklabStr}`);
 
                 const L = parseComponent(match[1], "lightness", true);
@@ -1195,14 +1182,19 @@ const formatConverters = (() => {
             },
             fromComponents: (oklabArray: number[]): string => {
                 const [L, a, b, alpha = 1] = oklabArray;
-                const formatNumber = (n: number, decimals: number) => {
-                    const fixed = n.toFixed(decimals);
-                    return parseFloat(fixed).toString();
+
+                const getPrecision = (step: number) => {
+                    const stepStr = step.toString();
+                    return stepStr.includes(".") ? stepStr.split(".")[1].length : 0;
                 };
 
-                const formattedL = `${formatNumber(L * 100, 2)}%`;
-                const formattedA = formatNumber(a, 3);
-                const formattedB = formatNumber(b, 3);
+                const lPrecision = getPrecision(converters.oklab.components.l.step);
+                const aPrecision = getPrecision(converters.oklab.components.a.step);
+                const bPrecision = getPrecision(converters.oklab.components.b.step);
+
+                const formattedL = `${L.toFixed(lPrecision)}%`;
+                const formattedA = a.toFixed(aPrecision);
+                const formattedB = b.toFixed(bPrecision);
 
                 return alpha === 1
                     ? `oklab(${formattedL} ${formattedA} ${formattedB})`
@@ -1268,7 +1260,7 @@ const formatConverters = (() => {
                     return ((num % 360) + 360) % 360;
                 };
 
-                const match = oklchStr.match(formatConverters.oklch.pattern);
+                const match = oklchStr.match(converters.oklch.pattern);
                 if (!match) throw new Error(`Invalid OKLCH format: ${oklchStr}`);
 
                 const L = parseComponent(match[1]);
@@ -1334,11 +1326,19 @@ const formatConverters = (() => {
             },
             fromComponents: (oklchComponents: number[]): string => {
                 const [L, C, h, alpha = 1] = oklchComponents;
-                const formatNumber = (n: number, decimals: number) => parseFloat(n.toFixed(decimals)).toString();
 
-                const formattedL = `${formatNumber(L * 100, 2)}%`;
-                const formattedC = formatNumber(C, 3);
-                const formattedH = formatNumber(h, 1);
+                const getPrecision = (step: number) => {
+                    const stepStr = step.toString();
+                    return stepStr.includes(".") ? stepStr.split(".")[1].length : 0;
+                };
+
+                const lPrecision = getPrecision(converters.oklch.components.l.step);
+                const cPrecision = getPrecision(converters.oklch.components.c.step);
+                const hPrecision = getPrecision(converters.oklch.components.h.step);
+
+                const formattedL = `${L.toFixed(lPrecision)}%`;
+                const formattedC = C.toFixed(cPrecision);
+                const formattedH = h.toFixed(hPrecision);
 
                 return alpha === 1
                     ? `oklch(${formattedL} ${formattedC} ${formattedH})`
@@ -1347,23 +1347,110 @@ const formatConverters = (() => {
         },
     };
 
-    Object.values(converters).forEach((converter) => {
-        if ("components" in converter) {
-            const components = converter.components as Record<string, ComponentDefinition>;
-
-            components["alpha"] = {
-                index: Object.keys(components).length,
-                min: 0,
-                max: 1,
-                step: 0.001,
-            };
-        }
-    });
-
     return converters;
-})() satisfies FormatConverters;
+})();
 
-const spaces = (() => {
+function createSpaceConverter<T extends string, C extends readonly string[]>(
+    name: T,
+    space: SpaceMatrixMap & { components: C; whitePoint?: "D50" | "D65" }
+): ConverterWithComponents {
+    const D65ToD50 = [
+        [1.0478112, 0.0228866, -0.050127],
+        [0.0295424, 0.9904844, -0.0170491],
+        [-0.0092345, 0.0150436, 0.7521316],
+    ];
+
+    const D50ToD65 = [
+        [0.9555766, -0.0230393, 0.0631636],
+        [-0.0282895, 1.0099416, 0.0210077],
+        [0.0122982, -0.020483, 1.3299098],
+    ];
+
+    const matrixMultiply = (a: number[][], b: number[][]): number[][] => {
+        return [
+            [
+                a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0],
+                a[0][0] * b[0][1] + a[0][1] * b[1][1] + a[0][2] * b[2][1],
+                a[0][0] * b[0][2] + a[0][1] * b[1][2] + a[0][2] * b[2][2],
+            ],
+            [
+                a[1][0] * b[0][0] + a[1][1] * b[1][0] + a[1][2] * b[2][0],
+                a[1][0] * b[0][1] + a[1][1] * b[1][1] + a[1][2] * b[2][1],
+                a[1][0] * b[0][2] + a[1][1] * b[1][2] + a[1][2] * b[2][2],
+            ],
+            [
+                a[2][0] * b[0][0] + a[2][1] * b[1][0] + a[2][2] * b[2][0],
+                a[2][0] * b[0][1] + a[2][1] * b[1][1] + a[2][2] * b[2][1],
+                a[2][0] * b[0][2] + a[2][1] * b[1][2] + a[2][2] * b[2][2],
+            ],
+        ];
+    };
+
+    const isD50 = space.whitePoint === "D50";
+
+    const toXYZMatrix = isD50 ? matrixMultiply(D50ToD65, space.toXYZMatrix) : space.toXYZMatrix;
+
+    const fromXYZMatrix = isD50 ? matrixMultiply(space.fromXYZMatrix, D65ToD50) : space.fromXYZMatrix;
+
+    return {
+        pattern: new RegExp(
+            `^color\\(\\s*${name}\\s+([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+%?)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)$`,
+            "i"
+        ),
+
+        components: Object.fromEntries(
+            space.components.map((comp, index) => [comp, { index, min: 0, max: 1, step: 1e-7 }])
+        ) as { [K in C[number]]: ComponentDefinition },
+
+        toComponents: (colorString: string): number[] => {
+            const match = colorString.match(
+                new RegExp(
+                    `^color\\(\\s*${name}\\s+([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+%?)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)$`,
+                    "i"
+                )
+            );
+            if (!match) {
+                throw new Error(`Invalid ${name} color: ${colorString}`);
+            }
+            const parseValue = (s: string) => (s.endsWith("%") ? parseFloat(s) / 100 : parseFloat(s));
+            const components = [1, 2, 3].map((i) => parseValue(match[i]));
+            const alpha = match[4] != null ? parseValue(match[4]) : 1;
+            return [...components, alpha];
+        },
+
+        fromComponents: (colorArray: number[]): string => {
+            const [comp1, comp2, comp3, alpha = 1] = colorArray;
+            const compStr = [comp1, comp2, comp3].map((c) => c).join(" ");
+            const alphaStr = alpha !== 1 ? ` / ${alpha}` : "";
+            return `color(${name} ${compStr}${alphaStr})`;
+        },
+
+        toXYZA: (colorArray: number[]): XYZA => {
+            const [r, g, b, a = 1] = colorArray;
+            const lr = space.toLinear(r);
+            const lg = space.toLinear(g);
+            const lb = space.toLinear(b);
+            const X = toXYZMatrix[0][0] * lr + toXYZMatrix[0][1] * lg + toXYZMatrix[0][2] * lb;
+            const Y = toXYZMatrix[1][0] * lr + toXYZMatrix[1][1] * lg + toXYZMatrix[1][2] * lb;
+            const Z = toXYZMatrix[2][0] * lr + toXYZMatrix[2][1] * lg + toXYZMatrix[2][2] * lb;
+            return [X, Y, Z, a];
+        },
+
+        fromXYZA: (xyza: XYZA): number[] => {
+            const [X, Y, Z, a = 1] = xyza;
+            const lr = fromXYZMatrix[0][0] * X + fromXYZMatrix[0][1] * Y + fromXYZMatrix[0][2] * Z;
+            const lg = fromXYZMatrix[1][0] * X + fromXYZMatrix[1][1] * Y + fromXYZMatrix[1][2] * Z;
+            const lb = fromXYZMatrix[2][0] * X + fromXYZMatrix[2][1] * Y + fromXYZMatrix[2][2] * Z;
+            const r = space.fromLinear ? space.fromLinear(lr) : lr;
+            const g = space.fromLinear ? space.fromLinear(lg) : lg;
+            const b = space.fromLinear ? space.fromLinear(lb) : lb;
+            return [r, g, b, a];
+        },
+    };
+}
+
+// WATCH: Conversions might be inaccurate.
+const spaceConverters = (() => {
     const identity = (c: number) => c;
     const identityMatrix = [
         [1, 0, 0],
@@ -1372,8 +1459,8 @@ const spaces = (() => {
     ];
 
     return {
-        srgb: {
-            components: ["r", "g", "b"],
+        srgb: createSpaceConverter("srgb", {
+            components: ["r", "g", "b"] as const,
             toLinear: (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)),
             fromLinear: (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055),
             toXYZMatrix: [
@@ -1386,10 +1473,11 @@ const spaces = (() => {
                 [-0.9689, 1.8758, 0.0415],
                 [0.0557, -0.204, 1.057],
             ],
-        },
+            whitePoint: "D65",
+        }),
 
-        "srgb-linear": {
-            components: ["r", "g", "b"],
+        "srgb-linear": createSpaceConverter("srgb-linear", {
+            components: ["r", "g", "b"] as const,
             toLinear: identity,
             fromLinear: identity,
             toXYZMatrix: [
@@ -1402,10 +1490,11 @@ const spaces = (() => {
                 [-0.9689, 1.8758, 0.0415],
                 [0.0557, -0.204, 1.057],
             ],
-        },
+            whitePoint: "D65",
+        }),
 
-        "display-p3": {
-            components: ["r", "g", "b"],
+        "display-p3": createSpaceConverter("display-p3", {
+            components: ["r", "g", "b"] as const,
             toLinear: (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)),
             fromLinear: (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055),
             toXYZMatrix: [
@@ -1418,10 +1507,11 @@ const spaces = (() => {
                 [-0.8295, 1.7627, 0.0236],
                 [0.0358, -0.0762, 0.957],
             ],
-        },
+            whitePoint: "D65",
+        }),
 
-        rec2020: {
-            components: ["r", "g", "b"],
+        rec2020: createSpaceConverter("rec2020", {
+            components: ["r", "g", "b"] as const,
             toLinear: (c: number) => {
                 const alpha = 1.099296358,
                     beta = 0.0180539685;
@@ -1442,10 +1532,11 @@ const spaces = (() => {
                 [-0.6667, 1.6165, 0.0158],
                 [0.0176, -0.0428, 0.9421],
             ],
-        },
+            whitePoint: "D65",
+        }),
 
-        "a98-rgb": {
-            components: ["r", "g", "b"],
+        "a98-rgb": createSpaceConverter("a98-rgb", {
+            components: ["r", "g", "b"] as const,
             toLinear: (c: number) => Math.pow(c, 563 / 256),
             fromLinear: (c: number) => Math.pow(c, 256 / 563),
             toXYZMatrix: [
@@ -1458,10 +1549,11 @@ const spaces = (() => {
                 [-0.9692, 1.8758, 0.0415],
                 [0.0134, -0.1184, 1.0152],
             ],
-        },
+            whitePoint: "D65",
+        }),
 
-        "prophoto-rgb": {
-            components: ["r", "g", "b"],
+        "prophoto-rgb": createSpaceConverter("prophoto-rgb", {
+            components: ["r", "g", "b"] as const,
             toLinear: (c: number) => (c < 0.001953 ? c / 16 : Math.pow(c, 1.8)),
             fromLinear: (c: number) => (c < 0.001953 * 16 ? c * 16 : Math.pow(c, 1 / 1.8)),
             toXYZMatrix: [
@@ -1474,107 +1566,56 @@ const spaces = (() => {
                 [-0.5446, 1.5082, 0.0205],
                 [0.0, 0.0, 1.212],
             ],
-        },
+            whitePoint: "D50",
+        }),
 
-        "xyz-d65": {
-            components: ["x", "y", "z"],
+        "xyz-d65": createSpaceConverter("xyz-d65", {
+            components: ["x", "y", "z"] as const,
             toLinear: identity,
             fromLinear: identity,
             toXYZMatrix: identityMatrix,
             fromXYZMatrix: identityMatrix,
-        },
+            whitePoint: "D65",
+        }),
 
-        "xyz-d50": {
-            components: ["x", "y", "z"],
-            toLinear: identity,
-            fromLinear: identity,
-            toXYZMatrix: [
-                [0.9555766, -0.0230393, 0.0631636],
-                [-0.0282895, 1.0099416, 0.0210077],
-                [0.0122982, -0.020483, 1.3299098],
-            ],
-            fromXYZMatrix: [
-                [1.0478112, 0.0228866, -0.050127],
-                [0.0295424, 0.9904844, -0.0170491],
-                [-0.0092345, 0.0150436, 0.7521316],
-            ],
-        },
-
-        xyz: {
-            components: ["x", "y", "z"],
+        "xyz-d50": createSpaceConverter("xyz-d50", {
+            components: ["x", "y", "z"] as const,
             toLinear: identity,
             fromLinear: identity,
             toXYZMatrix: identityMatrix,
             fromXYZMatrix: identityMatrix,
-        },
+            whitePoint: "D50",
+        }),
+
+        xyz: createSpaceConverter("xyz", {
+            components: ["x", "y", "z"] as const,
+            toLinear: identity,
+            fromLinear: identity,
+            toXYZMatrix: identityMatrix,
+            fromXYZMatrix: identityMatrix,
+            whitePoint: "D65",
+        }),
     };
-})() satisfies Spaces;
+})();
 
-const spaceConverters = Object.fromEntries(
-    Object.entries(spaces).map(([name, space]) => [
-        name,
-        {
-            pattern: new RegExp(
-                `^color\\(\\s*${name}\\s+([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+%?)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)$`,
-                "i"
-            ),
+const converters = (() => {
+    const converterObjects = { ...formatConverters, ...spaceConverters };
 
-            components: (() => {
-                const comps = [...space.components, "alpha"];
-                return Object.fromEntries(comps.map((comp, index) => [comp, { index, min: 0, max: 1, precision: 7 }]));
-            })(),
+    Object.values(converterObjects).forEach((converter) => {
+        if ("components" in converter) {
+            const components = converter.components as Record<string, ComponentDefinition>;
 
-            toComponents: (colorString: string): number[] => {
-                const pattern = new RegExp(
-                    `^color\\(\\s*${name}\\s+([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+%?)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)$`,
-                    "i"
-                );
-                const match = colorString.match(pattern);
-                if (!match) {
-                    throw new Error(`Invalid ${name} color: ${colorString}`);
-                }
-                const parseValue = (s: string) => (s.endsWith("%") ? parseFloat(s) / 100 : parseFloat(s));
-                const components = [1, 2, 3].map((i) => parseValue(match[i]));
-                const alpha = match[4] != null ? parseValue(match[4]) : 1;
-                return [...components, alpha];
-            },
+            components["alpha"] = {
+                index: Object.keys(components).length,
+                min: 0,
+                max: 1,
+                step: 0.001,
+            };
+        }
+    });
 
-            fromComponents: (colorArray: number[]): string => {
-                const [comp1, comp2, comp3, alpha = 1] = colorArray;
-                const compStr = [comp1, comp2, comp3].map((c) => c).join(" ");
-                const alphaStr = alpha !== 1 ? ` / ${alpha}` : "";
-                return `color(${name} ${compStr}${alphaStr})`;
-            },
-
-            toXYZA: (colorArray: number[]): XYZA => {
-                const [r, g, b, a = 1] = colorArray;
-                const lr = space.toLinear(r);
-                const lg = space.toLinear(g);
-                const lb = space.toLinear(b);
-                const X = space.toXYZMatrix[0][0] * lr + space.toXYZMatrix[0][1] * lg + space.toXYZMatrix[0][2] * lb;
-                const Y = space.toXYZMatrix[1][0] * lr + space.toXYZMatrix[1][1] * lg + space.toXYZMatrix[1][2] * lb;
-                const Z = space.toXYZMatrix[2][0] * lr + space.toXYZMatrix[2][1] * lg + space.toXYZMatrix[2][2] * lb;
-                return [X, Y, Z, a];
-            },
-
-            fromXYZA: (xyza: XYZA): number[] => {
-                const [X, Y, Z, a = 1] = xyza;
-                const lr =
-                    space.fromXYZMatrix[0][0] * X + space.fromXYZMatrix[0][1] * Y + space.fromXYZMatrix[0][2] * Z;
-                const lg =
-                    space.fromXYZMatrix[1][0] * X + space.fromXYZMatrix[1][1] * Y + space.fromXYZMatrix[1][2] * Z;
-                const lb =
-                    space.fromXYZMatrix[2][0] * X + space.fromXYZMatrix[2][1] * Y + space.fromXYZMatrix[2][2] * Z;
-                const r = Math.max(0, Math.min(1, space.fromLinear(lr)));
-                const g = Math.max(0, Math.min(1, space.fromLinear(lg)));
-                const b = Math.max(0, Math.min(1, space.fromLinear(lb)));
-                return [r, g, b, a];
-            },
-        },
-    ])
-) as unknown as { [K in Space]: SpaceConverters[K] };
-
-const converters = { ...formatConverters, ...spaceConverters } satisfies SpaceConverters | FormatConverters;
+    return converterObjects;
+})() satisfies Converters;
 
 /**
  * The `Color` class represents a dynamic CSS color object, allowing for the manipulation
@@ -1687,10 +1728,15 @@ class Color {
     static from(color: Name): Color; // eslint-disable-line no-unused-vars
     static from(color: string): Color; // eslint-disable-line no-unused-vars
     static from(color: Name | string) {
+        if (Color.isRelative(color)) {
+            const { type, components } = Color.parseRelative(color);
+            return Color.in(type).setArray(components);
+        }
+
         for (const [, converter] of Object.entries(converters)) {
             if (converter.pattern.test(color)) {
                 let x, y, z, a;
-                if ("toComponents" in converter) {
+                if ("components" in converter) {
                     const components = converter.toComponents(color);
                     [x, y, z, a] = converter.toXYZA(components);
                 } else {
@@ -1730,14 +1776,18 @@ class Color {
     }
 
     // FIXME...
-    static registerFormat(format: string, formatObject: ConverterWithComponents | ConverterWithoutComponents) {
-        (formatConverters as Record<Format, ConverterWithComponents | ConverterWithoutComponents>)[format as Format] =
-            formatObject;
+    static registerFormat(formatName: string, formatObject: ConverterWithComponents | ConverterWithoutComponents) {
+        (formatConverters as Record<Format, ConverterWithComponents | ConverterWithoutComponents>)[
+            formatName as Format
+        ] = formatObject;
     }
 
     // FIXME...
-    static registerSpace(space: string, spaceObject: SpaceMatrixMap) {
-        (spaces as Record<Space, SpaceMatrixMap>)[space as Space] = spaceObject;
+    static registerSpace(spaceName: string, spaceObject: SpaceMatrixMap) {
+        (spaceConverters as Record<Space, ConverterWithComponents>)[spaceName as Space] = createSpaceConverter(
+            spaceName,
+            spaceObject
+        );
     }
 
     /**
@@ -1750,24 +1800,13 @@ class Color {
         const error = `Unsupported color format: ${color}\nSupported formats: ${Object.keys(this.patterns).join(", ")}`;
 
         if (this.isRelative(color)) {
-            const match = color.match(this.patterns.relative);
-            if (match) {
-                const funcName = match[1];
-                if (funcName in formatConverters) {
-                    return funcName as Format;
-                } else if (funcName === "color") {
-                    const spaceName = match[4];
-                    if (spaceName && spaceName in spaceConverters) {
-                        return spaceName as Space;
-                    }
-                }
-            }
-            throw new Error(error);
+            const { type } = Color.parseRelative(color);
+            return type;
         }
 
         for (const [key, pattern] of Object.entries(this.patterns)) {
             if (pattern.test(color.trim())) {
-                return key as Format | Space;
+                return key as Format;
             }
         }
 
@@ -1812,83 +1851,118 @@ class Color {
     }
 
     static parseRelative(color: string) {
-        const parseComponent = <M extends Model>(component: string, baseColor: Color, model: M): number => {
-            console.log({
-                color,
-                component,
-                baseColor,
-                model,
-                parsed: (() => {
-                    if (/^-?\d*\.?\d+$/.test(component)) {
-                        return parseFloat(component);
-                    } else if (/^-?\d*\.?\d+%$/.test(component)) {
-                        return parseFloat(component.slice(0, -1)) / 100;
-                    } else if (component.startsWith("calc(") && component.endsWith(")")) {
-                        const expression = component.slice(5, -1).trim();
-                        return evaluateExpression(expression, baseColor, model);
-                    } else {
-                        return baseColor.in(model).get(component as Component<M>);
-                    }
-                })(),
-            });
-            if (/^-?\d*\.?\d+$/.test(component)) {
-                // Case 1: Pure number (e.g., "255" or "-10.5")
-                console.log("pure number");
+        const parseComponent = <M extends Model>(
+            component: string,
+            colorInstance: Color,
+            model: M,
+            index: number
+        ): number => {
+            console.log(component);
+            if (/^\d*\.?\d+$/.test(component)) {
+                // Case 1: Pure number (e.g., "255")
                 return parseFloat(component);
-            } else if (/^-?\d*\.?\d+%$/.test(component)) {
-                // Case 2: Percentage (e.g., "50%" or "-25%")
-                console.log("percentage");
-                return parseFloat(component.slice(0, -1)) / 100;
+            } else if (/^\d*\.?\d+%$/.test(component)) {
+                // Case 2: Percentage (e.g., "50%")
+                const percentage = parseFloat(component.slice(0, -1)) / 100;
+                const converter = converters[model];
+                const { min, max } = Object.values(converter.components).find((c) => c.index === index);
+                return min + percentage * (max - min);
             } else if (component.startsWith("calc(") && component.endsWith(")")) {
                 // Case 3: calc() expression (e.g., "calc(r * 2)")
-                console.log("with calc");
                 const expression = component.slice(5, -1).trim();
-                return evaluateExpression(expression, baseColor, model);
+                return evaluateExpression(expression, colorInstance, model);
             } else {
                 // Case 4: Component name (e.g., "r", "g", "b")
-                console.log("component name: ", component, " ", model);
-                return baseColor.in(model).get(component as Component<M>);
+                console.log(colorInstance.in(model).get(component as Component<M>));
+                return colorInstance.in(model).get(component as Component<M>);
             }
         };
 
         const evaluateExpression = <M extends Model>(expression: string, baseColor: Color, model: M): number => {
-            const tokens = expression.split(/\s+/);
-            let value = 0;
-            let operator = "+";
+            const infixToPostfix = (tokens: string[]): string[] => {
+                const output: string[] = [];
+                const operatorStack: string[] = [];
+                type Operator = "+" | "-" | "*" | "/";
+                const precedence: Record<Operator, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
 
-            for (const token of tokens) {
-                if (token === "+" || token === "-" || token === "*" || token === "/") {
-                    operator = token;
-                } else {
-                    let operand: number;
-                    if (/^-?\d*\.?\d+$/.test(token)) {
-                        operand = parseFloat(token);
-                    } else if (/^-?\d*\.?\d+%$/.test(token)) {
-                        operand = parseFloat(token.slice(0, -1)) / 100;
-                    } else {
-                        operand = baseColor.in(model).get(token as Component<M>);
+                for (const token of tokens) {
+                    if (/^-?\d*\.?\d+$/.test(token) || /^-?\d*\.?\d+%$/.test(token) || /^[a-zA-Z]+$/.test(token)) {
+                        output.push(token);
+                    } else if (token === "(") {
+                        operatorStack.push(token);
+                    } else if (token === ")") {
+                        while (operatorStack.length && operatorStack[operatorStack.length - 1] !== "(") {
+                            output.push(operatorStack.pop()!);
+                        }
+                        operatorStack.pop();
+                    } else if (token in precedence) {
+                        while (
+                            operatorStack.length &&
+                            operatorStack[operatorStack.length - 1] !== "(" &&
+                            precedence[operatorStack[operatorStack.length - 1] as Operator] >=
+                                precedence[token as Operator]
+                        ) {
+                            output.push(operatorStack.pop()!);
+                        }
+                        operatorStack.push(token);
                     }
-
-                    if (operator === "+") value += operand;
-                    else if (operator === "-") value -= operand;
-                    else if (operator === "*") value *= operand;
-                    else if (operator === "/") value /= operand;
                 }
-            }
-            return value;
+                while (operatorStack.length) {
+                    output.push(operatorStack.pop()!);
+                }
+                return output;
+            };
+
+            const evaluatePostfix = (postfix: string[]): number => {
+                const stack: number[] = [];
+
+                for (const token of postfix) {
+                    if (/^-?\d*\.?\d+$/.test(token)) {
+                        stack.push(parseFloat(token));
+                    } else if (/^-?\d*\.?\d+%$/.test(token)) {
+                        stack.push(parseFloat(token.slice(0, -1)) / 100);
+                    } else if (/^[a-zA-Z]+$/.test(token)) {
+                        stack.push(baseColor.in(model).get(token as Component<M>));
+                    } else if (token in { "+": 1, "-": 1, "*": 1, "/": 1 }) {
+                        const b = stack.pop()!;
+                        const a = stack.pop()!;
+                        /* eslint-disable indent */
+                        switch (token) {
+                            case "+":
+                                stack.push(a + b);
+                                break;
+                            case "-":
+                                stack.push(a - b);
+                                break;
+                            case "*":
+                                stack.push(a * b);
+                                break;
+                            case "/":
+                                stack.push(a / b);
+                                break;
+                        }
+                        /* eslint-enable indent */
+                    }
+                }
+                return stack[0];
+            };
+
+            const tokens = expression.split(/\s+/);
+            const postfix = infixToPostfix(tokens);
+            return evaluatePostfix(postfix);
         };
 
         const funcNameMatch = color.match(/^(\w+)(?=\()/);
         if (!funcNameMatch) throw new Error(`"${color}" is not a valid relative format.`);
         const funcName = funcNameMatch[1];
 
-        let baseColorStr: string, type: string, componentsStr: string;
+        let baseColor: string, type: Model, componentsStr: string;
 
         if (funcName === "color") {
             const match = color.match(/^color\(from ([a-z0-9-]+) ([a-z0-9-]+) (.*)\)$/);
             if (!match) throw new Error(`Invalid format for color(): "${color}"`);
-            baseColorStr = match[1];
-            type = match[2];
+            baseColor = match[1];
+            type = match[2] as Model;
             componentsStr = match[3];
             if (!(type in spaceConverters))
                 throw new Error(
@@ -1897,16 +1971,14 @@ class Color {
         } else {
             const match = color.match(new RegExp(`^${funcName}\\(from (\\w+) (.*)\\)$`));
             if (!match) throw new Error(`Invalid format for ${funcName}(): "${color}"`);
-            baseColorStr = match[1];
-            type = funcName;
+            baseColor = match[1];
+            type = funcName as Model;
             componentsStr = match[2];
             if (!(type in formatConverters))
                 throw new Error(
                     `Invalid function name for relative format: ${type}\nSupported function names are: ${Object.keys(formatConverters).join(", ")}.`
                 );
         }
-
-        const baseColor = Color.from(baseColorStr);
 
         const tokens: string[] = [];
         let currentToken = "";
@@ -1935,20 +2007,22 @@ class Color {
         }
         if (currentToken) tokens.push(currentToken);
 
+        const colorInstance = Color.from(baseColor);
+
         const components: number[] = [];
         let i = 0;
         while (components.length < 3 && i < tokens.length) {
-            components.push(parseComponent(tokens[i], baseColor, type as Model));
+            components.push(parseComponent(tokens[i], colorInstance, type, i));
             i++;
         }
         if (i < tokens.length && tokens[i] === "/") {
             i++;
             if (i < tokens.length) {
-                components.push(parseComponent(tokens[i], baseColor, type as Model));
+                components.push(parseComponent(tokens[i], colorInstance, type, i));
             }
         }
 
-        return { funcName, baseColor: baseColorStr, type, components };
+        return { funcName, baseColor, type, components };
     }
 
     /**
@@ -2023,14 +2097,14 @@ class Color {
             );
         }
 
-        if ("fromComponents" in converter) {
+        if ("components" in converter) {
             const components = converter.fromXYZA(this.xyza);
-            const componentProps: Array<{ min: number; max: number; loop?: boolean; step: number }> = [];
+            const componentProps: ComponentDefinition[] = [];
             for (const [, props] of Object.entries(converter.components)) {
                 componentProps[props.index] = props;
             }
 
-            const adjustedComponents = components.map((value, i) => {
+            const clampedComponents = components.map((value, i) => {
                 const props = componentProps[i];
                 if (!props) {
                     throw new Error(`Missing component properties for index ${i}`);
@@ -2044,11 +2118,14 @@ class Color {
                     clipped = Math.min(props.max, Math.max(props.min, value));
                 }
 
-                const step = props.step;
-                return Math.round(clipped / step) * step;
+                const step = props.step || 1e-9;
+                const rounded = Math.round(clipped / step) * step;
+                return Number(rounded.toFixed(10));
             });
 
-            return converter.fromComponents(adjustedComponents, options);
+            console.log({ format, components, clampedComponents });
+
+            return converter.fromComponents(clampedComponents, options);
         } else {
             return converter.fromXYZA(this.xyza);
         }
@@ -2124,11 +2201,10 @@ class Color {
      * ```typescript
      * Color.from("red")
      *     .in("hsl")
-     *     .set({ saturation: (s) => s += 20 })
+     *     .set({ s: (s) => s += 20 })
      *     .to("rgb");
      * ```
      */
-    // FIXME: It can't recognize spaces' components
     in<M extends Model>(model: M): InModel<M> {
         const converter = converters[model];
 
@@ -2143,6 +2219,7 @@ class Color {
 
         const get = (component: Component<M>) => {
             const colorArray = converter.fromXYZA(this.xyza);
+            console.log(colorArray);
             const { min, max, step, index } = converter.components[component as keyof typeof converter.components];
             return clampValue(colorArray[index], min, max, step);
         };
@@ -2234,6 +2311,11 @@ class Color {
      * Instance Utility Methods
      * ────────────────────────────────────────────────────────
      */
+
+    clone() {
+        const xyza = this.xyza;
+        return new Color(...xyza);
+    }
 
     /**
      * Compares the current color object with another color string.
