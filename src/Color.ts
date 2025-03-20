@@ -118,6 +118,7 @@ export interface Converters {
     [key: string]: ColorConverter;
 }
 
+// FIXME: It can't recognize the components of spaceConverters
 export type ComponentNames<T> = T extends {
     components: Record<infer N, ComponentDefinition>;
 }
@@ -153,7 +154,7 @@ export interface InModel<M extends Model> {
     setArray: (array: number[]) => Color & InModel<M>;
 
     /** Mixes this color with another by a specified amount. */
-    mixWith: (color: string, amount: number) => Color & InModel<M>;
+    mixWith: (color: string, amount: number, hueInterpolationMethod?: HueInterpolationMethod) => Color & InModel<M>;
 }
 
 /**
@@ -206,6 +207,8 @@ export type SpaceMatrixMap = {
  * Maps space identifiers to their matrix definitions.
  */
 export type Spaces = Record<string, SpaceMatrixMap>;
+
+export type HueInterpolationMethod = "shorter" | "longer" | "increasing" | "decreasing";
 
 /* eslint-enable no-unused-vars */
 
@@ -364,8 +367,10 @@ const namedColors = {
     transparent: [0, 0, 0, 0],
 } satisfies { [named: string]: RGBA };
 
+// FIXME: lch and lab need a bit more accuracy according to https://www.w3.org/TR/css-color-5/.
 const formatConverters = (() => {
     const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
+    const percentageOptional = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))(?:%)?)";
     const rgbNum = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|\\d{1,2})(?:\\.\\d+)?";
     const rgbComponent = `(?:${rgbNum}|${percentage})`;
     const hue = "[-+]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:deg)?";
@@ -417,9 +422,6 @@ const formatConverters = (() => {
                 const a =
                     match[3] != null ? (match[3].includes("%") ? parseFloat(match[3]) / 100 : parseFloat(match[3])) : 1;
 
-                if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || a < 0 || a > 1) {
-                    throw new Error(`RGB values must be in [0, 255] and alpha in [0, 1]: ${rgb}`);
-                }
                 return [r, g, b, a];
             },
             fromComponents: (rgbArray: number[], options?: FormattingOptions) => {
@@ -575,11 +577,11 @@ const formatConverters = (() => {
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    percentage +
+                    percentageOptional +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    percentage +
+                    percentageOptional +
                     "|none)" +
                     "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
                     "(" +
@@ -746,11 +748,11 @@ const formatConverters = (() => {
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    percentage +
+                    percentageOptional +
                     "|none)" +
                     "\\s*(?:,\\s*|\\s+)" +
                     "(" +
-                    percentage +
+                    percentageOptional +
                     "|none)" +
                     "(?:\\s*(?:,\\s*|\\s+|\\/\\s*)" +
                     "(" +
@@ -1400,7 +1402,7 @@ function createSpaceConverter<T extends string, C extends readonly string[]>(
 
         components: Object.fromEntries(
             space.components.map((comp, index) => [comp, { index, min: 0, max: 1, step: 1e-7 }])
-        ) as { [K in C[number]]: ComponentDefinition },
+        ) as { [K in C[number]]: ComponentDefinition }, // eslint-disable-line no-unused-vars
 
         toComponents: (colorString: string): number[] => {
             const match = colorString.match(
@@ -1681,16 +1683,16 @@ class Color {
      * A collection of regular expressions for parsing color strings.
      */
     // eslint-disable-next-line no-unused-vars
-    static patterns: { [K in Format | Space | "relative"]: RegExp } = (() => {
-        const relative = (() => {
-            const formatPatterns = Object.values(formatConverters)
-                .map((fc) => fc.pattern.source.replace(/^\^|\$$/g, ""))
-                .join(")|(");
+    static patterns: { [K in Format | Space | "relative" | "color-mix"]: RegExp } = (() => {
+        const formatPatterns = Object.values(formatConverters)
+            .map((fc) => fc.pattern.source.replace(/^\^|\$$/g, ""))
+            .join("|");
+        const spacePatterns = Object.values(spaceConverters)
+            .map((sc) => sc.pattern.source.replace(/^\^|\$$/g, ""))
+            .join("|");
+        const color = `(?:${formatPatterns}|${spacePatterns})`;
 
-            const spacePatterns = Object.values(spaceConverters)
-                .map((sc) => sc.pattern.source.replace(/^\^|\$$/g, ""))
-                .join(")|(");
-            const color = `(${formatPatterns})|(${spacePatterns})`;
+        const relative = (() => {
             const funcNames = "color|" + Object.keys(formatConverters).join("|");
             const spaceNames = Object.keys(spaceConverters).join("|");
             const numberOrCalc = "([a-z]+|calc\\([^\\)]+\\)|[+-]?\\d*\\.?\\d+(?:%|[a-z]+)?)";
@@ -1700,10 +1702,20 @@ class Color {
             return new RegExp(pattern, "i");
         })();
 
+        const colorMix = (() => {
+            const modelNames = Object.keys(converters).join("|");
+            const percentage = "(?:(?:100(?:\\.0+)?|(?:\\d{1,2}(?:\\.\\d+)?|\\.[0-9]+))%)";
+            const hueInterpolationMethods = "shorter|longer|increasing|decreasing";
+            const colorWithOptionalPercentage = `${color}(?:\\s+${percentage})?`;
+            const pattern = `^color-mix\\(\\s*in\\s+(${modelNames})(?:\\s+(${hueInterpolationMethods})\\s+hue)?\\s*,\\s*${colorWithOptionalPercentage}\\s*,\\s*${colorWithOptionalPercentage}\\s*\\)$`;
+            return new RegExp(pattern, "i");
+        })();
+
         return {
             ...Object.fromEntries(Object.entries(converters).map(([key, value]) => [key, value.pattern])),
             relative,
-        } as { [K in Format | Space | "relative"]: RegExp }; // eslint-disable-line no-unused-vars
+            "color-mix": colorMix,
+        } as { [K in Format | Space | "relative" | "color-mix"]: RegExp }; // eslint-disable-line no-unused-vars
     })();
 
     /**
@@ -1731,6 +1743,36 @@ class Color {
         if (Color.isRelative(color)) {
             const { type, components } = Color.parseRelative(color);
             return Color.in(type).setArray(components);
+        }
+
+        if (Color.isColorMix(color)) {
+            const parsed = Color.parseColorMix(color);
+            const { model, hueInterpolationMethod, color1, color2 } = parsed;
+            let { weight1, weight2 } = parsed;
+
+            if (!weight1 && weight2) {
+                weight1 = 1 - weight2;
+            } else if (weight1 && !weight2) {
+                weight2 = 1 - weight1;
+            } else {
+                weight1 = 0.5;
+                weight2 = 0.5;
+            }
+
+            const totalWeight = weight1 + weight2;
+            if (totalWeight > 1) {
+                weight1 /= totalWeight;
+                weight2 /= totalWeight;
+            }
+
+            const weight2Prime = weight2 / (weight1 + weight2);
+
+            const colorInstance = Color.from(color1.to("xyz"))
+                .in(model)
+                .mixWith(color2.to("xyz"), weight2Prime, hueInterpolationMethod);
+
+            // Create a new Color instance because .in(model) methods return chainable .in(model) methods.
+            return new Color(...colorInstance.xyza);
         }
 
         for (const [, converter] of Object.entries(converters)) {
@@ -1775,19 +1817,37 @@ class Color {
         (namedColors as Record<Name, RGBA>)[cleanedName as Name] = rgba;
     }
 
-    // FIXME...
     static registerFormat(formatName: string, formatObject: ConverterWithComponents | ConverterWithoutComponents) {
         (formatConverters as Record<Format, ConverterWithComponents | ConverterWithoutComponents>)[
             formatName as Format
         ] = formatObject;
+
+        if ("components" in formatObject) {
+            const components = formatObject.components as Record<string, ComponentDefinition>;
+            components["alpha"] = {
+                index: Object.keys(components).length,
+                min: 0,
+                max: 1,
+                step: 0.001,
+            };
+        }
+
+        (converters as Record<string, ColorConverter>)[formatName] = formatObject;
     }
 
-    // FIXME...
     static registerSpace(spaceName: string, spaceObject: SpaceMatrixMap) {
-        (spaceConverters as Record<Space, ConverterWithComponents>)[spaceName as Space] = createSpaceConverter(
-            spaceName,
-            spaceObject
-        );
+        const spaceConverter = createSpaceConverter(spaceName, spaceObject);
+        (spaceConverters as Record<Space, ConverterWithComponents>)[spaceName as Space] = spaceConverter;
+
+        const components = spaceConverter.components as Record<string, ComponentDefinition>;
+        components["alpha"] = {
+            index: Object.keys(components).length,
+            min: 0,
+            max: 1,
+            step: 0.001,
+        };
+
+        (converters as Record<string, ColorConverter>)[spaceName] = spaceConverter;
     }
 
     /**
@@ -1796,12 +1856,16 @@ class Color {
      * @param color - The color string to be evaluated.
      * @returns The key corresponding to the matched color pattern.
      */
-    static type(color: string): Format | Space {
+    static type(color: string): Format | Space | "color-mix" {
         const error = `Unsupported color format: ${color}\nSupported formats: ${Object.keys(this.patterns).join(", ")}`;
 
         if (this.isRelative(color)) {
             const { type } = Color.parseRelative(color);
             return type;
+        }
+
+        if (this.isColorMix(color)) {
+            return "color-mix";
         }
 
         for (const [key, pattern] of Object.entries(this.patterns)) {
@@ -1857,7 +1921,6 @@ class Color {
             model: M,
             index: number
         ): number => {
-            console.log(component);
             if (/^\d*\.?\d+$/.test(component)) {
                 // Case 1: Pure number (e.g., "255")
                 return parseFloat(component);
@@ -1873,7 +1936,6 @@ class Color {
                 return evaluateExpression(expression, colorInstance, model);
             } else {
                 // Case 4: Component name (e.g., "r", "g", "b")
-                console.log(colorInstance.in(model).get(component as Component<M>));
                 return colorInstance.in(model).get(component as Component<M>);
             }
         };
@@ -2025,6 +2087,68 @@ class Color {
         return { funcName, baseColor, type, components };
     }
 
+    static parseColorMix(colorStr: string) {
+        if (!this.patterns["color-mix"].test(colorStr)) {
+            throw new Error(`"${colorStr}" is not a valid mixed color format.`);
+        }
+
+        const inner = colorStr.slice(colorStr.indexOf("(") + 1, colorStr.lastIndexOf(")")).trim();
+        if (!inner.startsWith("in ")) {
+            throw new Error('Invalid color-mix syntax; expected "in" keyword.'); // eslint-disable-line quotes
+        }
+        const rest = inner.slice(3).trim();
+
+        const firstComma = rest.indexOf(",");
+        if (firstComma === -1) {
+            throw new Error("Missing comma separator in color-mix declaration.");
+        }
+        const preComma = rest.slice(0, firstComma).trim();
+        const afterComma = rest.slice(firstComma + 1).trim();
+
+        const preTokens = preComma.split(/\s+/);
+        let model: Model;
+        let hueInterpolationMethod: HueInterpolationMethod = "shorter";
+        if (preTokens.length === 1) {
+            model = preTokens[0] as Model;
+        } else if (preTokens.length === 3 && preTokens[2].toLowerCase() === "hue") {
+            model = preTokens[0] as Model;
+            hueInterpolationMethod = preTokens[1] as HueInterpolationMethod;
+        } else {
+            throw new Error(`Invalid model and hue interpolation part: "${preComma}"`);
+        }
+
+        const parts = afterComma.split(/\s*,\s*/);
+        if (parts.length !== 2) {
+            throw new Error(`Expected exactly two colors in color-mix but got: ${parts.length}`);
+        }
+
+        const parseColorAndWeight = (part: string) => {
+            const tokens = part.split(/\s+/);
+            let weight: number | undefined;
+            if (tokens.length > 1 && tokens[tokens.length - 1].endsWith("%")) {
+                const pct = tokens.pop()!;
+                weight = parseFloat(pct.slice(0, -1)) / 100;
+            }
+            const colorComponent = tokens.join(" ");
+            return { colorComponent, weight };
+        };
+
+        const firstColorData = parseColorAndWeight(parts[0]);
+        const secondColorData = parseColorAndWeight(parts[1]);
+
+        const color1 = Color.from(firstColorData.colorComponent);
+        const color2 = Color.from(secondColorData.colorComponent);
+
+        return {
+            model,
+            hueInterpolationMethod,
+            color1,
+            weight1: firstColorData.weight,
+            color2,
+            weight2: secondColorData.weight,
+        };
+    }
+
     /**
      * Determines if a pair of colors meets the WCAG contrast ratio requirements.
      *
@@ -2068,6 +2192,10 @@ class Color {
 
     static isRelative(color: string) {
         return this.patterns.relative.test(color);
+    }
+
+    static isColorMix(color: string) {
+        return this.patterns["color-mix"].test(color);
     }
 
     /**
@@ -2122,8 +2250,6 @@ class Color {
                 const rounded = Math.round(clipped / step) * step;
                 return Number(rounded.toFixed(10));
             });
-
-            console.log({ format, components, clampedComponents });
 
             return converter.fromComponents(clampedComponents, options);
         } else {
@@ -2219,7 +2345,6 @@ class Color {
 
         const get = (component: Component<M>) => {
             const colorArray = converter.fromXYZA(this.xyza);
-            console.log(colorArray);
             const { min, max, step, index } = converter.components[component as keyof typeof converter.components];
             return clampValue(colorArray[index], min, max, step);
         };
@@ -2280,7 +2405,7 @@ class Color {
             return Object.assign(this, { ...this.in(model) }) as typeof this & InModel<M>;
         };
 
-        const mixWith = (color: string, amount: number = 0.5) => {
+        const mixWith = (color: string, amount = 0.5, hueInterpolationMethod = "shorter") => {
             const t = Math.max(0, Math.min(amount, 1));
 
             const otherColor = Color.from(color);
@@ -2290,20 +2415,164 @@ class Color {
             for (const component in components) {
                 if (Object.prototype.hasOwnProperty.call(components, component)) {
                     const comp = component as Component<M>;
-                    const currentValue = get(comp);
-                    const otherValue = otherInterface.get(comp);
+                    if (comp === "h") {
+                        const currentHue = get("h" as Component<M>);
+                        const otherHue = otherInterface.get("h" as Component<M>);
+                        let mixedHue: number;
 
-                    const mixedValue = currentValue * (1 - t) + otherValue * t;
-                    set({ [comp]: mixedValue } as Partial<{
-                        [K in Component<M>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
-                    }>);
+                        /* eslint-disable indent */
+                        switch (hueInterpolationMethod) {
+                            case "shorter": {
+                                let deltaShort = otherHue - currentHue;
+                                deltaShort = ((deltaShort + 180) % 360) - 180;
+                                mixedHue = currentHue + t * deltaShort;
+                                break;
+                            }
+                            case "longer": {
+                                let deltaLong = otherHue - currentHue;
+                                deltaLong = ((deltaLong + 180) % 360) - 180;
+                                if (deltaLong !== 0) {
+                                    deltaLong = deltaLong > 0 ? deltaLong - 360 : deltaLong + 360;
+                                }
+                                mixedHue = currentHue + t * deltaLong;
+                                break;
+                            }
+                            case "increasing": {
+                                let adjustedHueInc = otherHue;
+                                if (otherHue < currentHue) {
+                                    adjustedHueInc += 360;
+                                }
+                                mixedHue = currentHue * (1 - t) + adjustedHueInc * t;
+                                break;
+                            }
+                            case "decreasing": {
+                                let adjustedHueDec = otherHue;
+                                if (otherHue > currentHue) {
+                                    adjustedHueDec -= 360;
+                                }
+                                mixedHue = currentHue * (1 - t) + adjustedHueDec * t;
+                                break;
+                            }
+                            default:
+                                throw new Error("Invalid hueInterpolationMethod");
+                        }
+                        /* eslint-enable indent */
+
+                        mixedHue = ((mixedHue % 360) + 360) % 360;
+                        set({ ["h" as Component<M>]: mixedHue } as Partial<{
+                            [K in Component<M>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
+                        }>);
+                    } else {
+                        const currentValue = get(comp);
+                        const otherValue = otherInterface.get(comp);
+                        const mixedValue = currentValue * (1 - t) + otherValue * t;
+                        set({ [comp]: mixedValue } as Partial<{
+                            [K in Component<M>]: number | ((prev: number) => number); // eslint-disable-line no-unused-vars
+                        }>);
+                    }
                 }
             }
 
             return Object.assign(this, { ...this.in(model) }) as typeof this & InModel<M>;
         };
-
         return { get, getComponents, getArray, set, setArray, mixWith };
+    }
+
+    /**
+     * ────────────────────────────────────────────────────────
+     * CSS Filter Functions
+     * ────────────────────────────────────────────────────────
+     */
+
+    opacity(amount: number) {
+        if (amount < 0 || amount > 1) {
+            throw new Error("Amount must be between 0 and 1 (inclusive).");
+        }
+
+        const instance = this.in("rgb").set({ alpha: (a) => a * amount });
+        return new Color(...instance.xyza);
+    }
+
+    saturate(amount: number) {
+        if (amount < 0) {
+            throw new Error("Amount must be 0 or greater.");
+        }
+
+        const instance = this.in("hsl").set({ s: (s) => s * amount });
+        return new Color(...instance.xyza);
+    }
+
+    hueRotate(amount: number) {
+        const instance = this.in("hsl").set({ h: (h) => h + amount });
+        return new Color(...instance.xyza);
+    }
+
+    contrast(amount: number) {
+        if (amount < 0) {
+            throw new Error("Amount must be 0 or greater.");
+        }
+
+        const instance = this.in("rgb").set({
+            r: (r) => Math.round((r - 128) * amount + 128),
+            g: (g) => Math.round((g - 128) * amount + 128),
+            b: (b) => Math.round((b - 128) * amount + 128),
+        });
+
+        return new Color(...instance.xyza);
+    }
+
+    sepia(amount: number) {
+        if (amount < 0 || amount > 1) {
+            throw new Error("Amount must be between 0 and 1 (inclusive).");
+        }
+
+        const inRGB = this.in("rgb");
+
+        const { r, g, b } = inRGB.getComponents();
+
+        const sepiaR = 0.393 * r + 0.769 * g + 0.189 * b;
+        const sepiaG = 0.349 * r + 0.686 * g + 0.168 * b;
+        const sepiaB = 0.272 * r + 0.534 * g + 0.131 * b;
+
+        const instance = inRGB.set({
+            r: r + (sepiaR - r) * amount,
+            g: g + (sepiaG - g) * amount,
+            b: b + (sepiaB - b) * amount,
+        });
+
+        return new Color(...instance.xyza);
+    }
+
+    brightness(amount: number) {
+        if (amount < 0) {
+            throw new Error("Amount must be 0 or greater.");
+        }
+
+        const instance = this.in("hsl").set({ l: (l) => l * amount });
+        return new Color(...instance.xyza);
+    }
+
+    grayscale(amount: number) {
+        if (amount < 0 || amount > 1) {
+            throw new Error("Amount must be between 0 and 1 (inclusive).");
+        }
+
+        const instance = this.in("hsl").set({ s: (s) => s * (1 - amount) });
+        return new Color(...instance.xyza);
+    }
+
+    invert(amount: number) {
+        if (amount < 0 || amount > 1) {
+            throw new Error("Amount must be between 0 and 1 (inclusive).");
+        }
+
+        const instance = this.in("rgb").set({
+            r: (r) => Math.round(r * (1 - amount) + (255 - r) * amount),
+            g: (g) => Math.round(g * (1 - amount) + (255 - g) * amount),
+            b: (b) => Math.round(b * (1 - amount) + (255 - b) * amount),
+        });
+
+        return new Color(...instance.xyza);
     }
 
     /**

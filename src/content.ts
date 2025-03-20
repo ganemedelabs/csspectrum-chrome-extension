@@ -1,5 +1,7 @@
 import Color, { type Space } from "./Color";
 
+// FIXME: Still can't process the text inside <pre> tag.
+
 /**
  * Determines the largest supported color space and syntax.
  *

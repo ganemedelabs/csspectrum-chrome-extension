@@ -10,7 +10,6 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
 ## 📋 Table of Contents
 
 - [Features](#-features)
-- [Upcoming Support](#-upcoming-support)
 - [Installation](#-installation)
 - [License](#-license)
 - [Contact](#-contact)
@@ -46,22 +45,6 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
 
 > [!NOTE]  
 > You can enable **"Include color spaces in the cycle"** to cycle through additional color spaces as well, including **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.
-
-## 📅 Upcoming Support
-
-CSSpectrum will soon support additional **CSS color models**, including:
-
-- [ ] **Relative CSS Colors**:
-
-    - `hsl(from red 240deg s l)`
-    - `hwb(from green h w b / 0.5)`
-    - `lch(from blue calc(l + 20) c h)`
-
-- [ ] **New CSS Color Functions**:
-
-    - `color-mix(in hsl, hsl(200 50 80), coral 80%)`
-    - `color-mix(in lch longer hue, hsl(200deg 50% 80%), coral)`
-    - `color-mix(in srgb, plum, #f00)`
 
 ## 🔧 Installation
 
