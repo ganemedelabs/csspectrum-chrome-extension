@@ -36,6 +36,15 @@ describe("Color", () => {
         expect(Color.type("color-mix(in lab, plum 60%, #f00 50%)")).toBe("color-mix");
     });
 
+    it("should correctly identify relative colors", () => {
+        expect(Color.type("color(from red a98-rgb r g b)")).toBe("a98-rgb");
+        expect(Color.type("color(from red xyz-d50 x y z / alpha)")).toBe("xyz-d50");
+        expect(Color.type("hsl(from red calc(h + s) s l)")).toBe("hsl");
+        expect(Color.type("hwb(from red h 50 b / w)")).toBe("hwb");
+        expect(Color.type("lab(from lch(51.51% 52.21 325.8) l a b)")).toBe("lab");
+        expect(Color.type("oklab(from oklch(100% 0 0) a calc(l * (a + b)) b / 0.5)")).toBe("oklab");
+    });
+
     it("should convert HEX to RGB", () => {
         expect(Color.from("#ff5733").to("rgb")).toBe("rgb(255, 87, 51)");
     });
@@ -45,7 +54,7 @@ describe("Color", () => {
     });
 
     it("should convert LCH color to sRGB", () => {
-        expect(Color.from("lch(79.7256 40.448 84.771)").to("srgb")).toBe("color(srgb 0.897294 0.7570619 0.47922)");
+        expect(Color.from("lch(79.7256 40.448 84.771)").to("srgb")).toBe("color(srgb 0.8741081 0.7604032 0.4764089)");
     });
 
     it("should calculate luminance correctly", () => {
