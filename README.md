@@ -5,7 +5,7 @@
 ![JavaScript](https://custom-icon-badges.demolab.com/badge/JavaScript-Vanilla-F7DF1E.svg?logo=javascript&logoColor=white)
 ![License](https://custom-icon-badges.demolab.com/github/license/ganemedelabs/csspectrum-chrome-extension?logo=law)
 
-CSSpectrum is a Chrome extension that enriches your browsing experience by detecting and highlighting color values on web pages—whether they're CSS color names, hex codes, RGB(A), or HSL(A). Each color is showcased in its true hue, and you can click on them to seamlessly switch between different color formats.
+The CSSpectrum Chrome Extension is a tool developed to improve the web browsing experience by detecting and displaying color values present on web pages. It accommodates a broad spectrum of color formats, including CSS color names, hexadecimal codes, RGB(A), HSL(A), and additional advanced formats. Each identified color is visually highlighted in its respective shade, and users may interact with these highlights to alternate between different color representations.
 
 ## 📋 Table of Contents
 
@@ -17,7 +17,7 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
 
 ## ✨ Features
 
-- **Dynamic Color Highlighting**: Detects and highlights color strings on webpages, including:
+- **Comprehensive Color Identification**: The extension systematically identifies and highlights color values across web pages, supporting the following formats:
 
     - CSS color names (e.g., `red`, `blue`)
     - Hexadecimal codes (e.g., `#FF5733`, `#0080FF80`)
@@ -30,21 +30,22 @@ CSSpectrum is a Chrome extension that enriches your browsing experience by detec
     - Oklch (e.g., `oklch(50% 0.1 270)`)
     - `color()` spaces (e.g., `color(srgb 1 1 1)`, `color(display-p3 1 1 1)`)
 
-- **Interactive Color Conversion**: Clicking on a highlighted color string cycles it through different formats:
+- **Interactive Color Conversion**:
+Users may click on a highlighted color to cycle it through different representations:
 
     1. CSS Color Name
-    2. RGB
+    2. RGB(A)
     3. Hexadecimal
-    4. HSL
+    4. HSL(A)
     5. HWB
     6. Lab
     7. LCH
     8. Oklab
     9. Oklch
-    10. Back to the original format
+    10. Original format
 
 > [!NOTE]  
-> You can enable **"Include color spaces in the cycle"** to cycle through additional color spaces as well, including **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.
+> Activating the **"Include color spaces in the cycle"** setting incorporates further color spaces into the sequence, such as **sRGB, sRGB-linear, Display-P3, A98-RGB, ProPhoto-RGB, Rec2020, XYZ, XYZ-D50, and XYZ-D65**.
 
 ## 🔧 Installation
 
@@ -72,4 +73,4 @@ For inquiries or more information, you can reach out to us at [ganemedelabs@gmai
 
 ## 🙏 Credits
 
-Icon used in this extension is by [Freepik](https://www.flaticon.com/) on Flaticon.
+The icon used in this extension is by [Freepik](https://www.flaticon.com/) on Flaticon.
