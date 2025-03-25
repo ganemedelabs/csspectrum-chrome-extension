@@ -1,27 +1,27 @@
 document.addEventListener("DOMContentLoaded", () => {
     const toggle = document.getElementById("toggle") as HTMLInputElement;
     const modernToggle = document.getElementById("modernToggle") as HTMLInputElement;
-    const includeGamutsToggle = document.getElementById("includeGamutsToggle") as HTMLInputElement;
+    const includeSpacesToggle = document.getElementById("includeSpacesToggle") as HTMLInputElement;
 
-    chrome.storage.sync.get({ enabled: true, modern: false, includeGamuts: false }, (result) => {
+    chrome.storage.sync.get({ enabled: true, modern: false, includeSpaces: false }, (result) => {
         toggle.checked = result.enabled;
         modernToggle.checked = result.modern;
-        includeGamutsToggle.checked = result.includeGamuts;
+        includeSpacesToggle.checked = result.includeSpaces;
         modernToggle.disabled = !toggle.checked;
-        includeGamutsToggle.disabled = !toggle.checked;
+        includeSpacesToggle.disabled = !toggle.checked;
     });
 
     toggle.addEventListener("change", () => {
         chrome.storage.sync.set({ enabled: toggle.checked });
         modernToggle.disabled = !toggle.checked;
-        includeGamutsToggle.disabled = !toggle.checked;
+        includeSpacesToggle.disabled = !toggle.checked;
     });
 
     modernToggle.addEventListener("change", () => {
         chrome.storage.sync.set({ modern: modernToggle.checked });
     });
 
-    includeGamutsToggle.addEventListener("change", () => {
-        chrome.storage.sync.set({ includeGamuts: includeGamutsToggle.checked });
+    includeSpacesToggle.addEventListener("change", () => {
+        chrome.storage.sync.set({ includeSpaces: includeSpacesToggle.checked });
     });
 });

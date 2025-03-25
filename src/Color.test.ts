@@ -30,10 +30,10 @@ describe("Color", () => {
     });
 
     it("should correctly identify mixed colors", () => {
-        expect(Color.type("color-mix(in hsl, hsl(200 50 80), coral 80%)")).toBe("color-mix");
-        expect(Color.type("color-mix(in lch longer hue, hsl(200deg 50% 80%), coral)")).toBe("color-mix");
-        expect(Color.type("color-mix(in srgb, plum, #f00)")).toBe("color-mix");
-        expect(Color.type("color-mix(in lab, plum 60%, #f00 50%)")).toBe("color-mix");
+        expect(Color.type("color-mix(in hsl, hsl(200 50 80), coral 80%)")).toBe("hsl");
+        expect(Color.type("color-mix(in lch longer hue, hsl(200deg 50% 80%), coral)")).toBe("lch");
+        expect(Color.type("color-mix(in srgb, plum, #f00)")).toBe("srgb");
+        expect(Color.type("color-mix(in lab, plum 60%, #f00 50%)")).toBe("lab");
     });
 
     it("should correctly identify relative colors", () => {
@@ -98,6 +98,11 @@ describe("Color", () => {
     it("should return a random color", () => {
         const randomColor = Color.random("named");
         expect(Color.type(randomColor)).toBe("named");
+    });
+
+    it("should return true if a color is in gamut", () => {
+        expect(Color.from("color(display-p3 1 0 0)").isInGamut("srgb")).toBe(false);
+        expect(Color.from("color(display-p3 1 0 0)").isInGamut("xyz")).toBe(true);
     });
 });
 

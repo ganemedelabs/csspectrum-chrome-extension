@@ -1498,11 +1498,11 @@ const formatConverters = (() => {
     return converters;
 })();
 
-// WATCH: Conversions might be inaccurate.
 /**
  * A collection of color space converters for various color spaces.
  * Each converter provides methods for converting colors between different color spaces and their linear representations.
  */
+// WATCH: Conversions might be inaccurate.
 const spaceConverters = (() => {
     const identity = (c: number) => c;
     const identityMatrix = [
@@ -1794,6 +1794,8 @@ class Color {
     static from(color: Name): Color; // eslint-disable-line no-unused-vars
     static from(color: string): Color; // eslint-disable-line no-unused-vars
     static from(color: Name | string) {
+        color = color.toLowerCase();
+
         if (Color.isRelative(color)) {
             const { type, components } = Color.parseRelative(color);
             return Color.in(type).setArray(components);
@@ -1954,7 +1956,8 @@ class Color {
         }
 
         if (this.isColorMix(color)) {
-            return "color-mix";
+            const { model } = Color.parseColorMix(color);
+            return model;
         }
 
         for (const [key, pattern] of Object.entries(this.patterns)) {
@@ -2034,36 +2037,65 @@ class Color {
      * ```
      */
     static parseRelative(color: string) {
+        function parseAngle(angleStr: string): number {
+            const match = angleStr.match(/^(-?\d*\.?\d+)(deg|rad|grad|turn)?$/);
+            if (!match) throw new Error(`Invalid angle format: ${angleStr}`);
+            const value = parseFloat(match[1]);
+            const unit = match[2] || "deg";
+            /* eslint-disable indent */
+            switch (unit) {
+                case "deg":
+                    return value;
+                case "rad":
+                    return (value * 180) / Math.PI;
+                case "grad":
+                    return (value * 360) / 400;
+                case "turn":
+                    return value * 360;
+                default:
+                    throw new Error(`Unknown angle unit: ${unit}`);
+            }
+            /* eslint-enable indent */
+        }
+
         const parseComponent = <M extends Model>(
             component: string,
             colorInstance: Color,
             model: M,
             index: number
         ): number => {
-            if (/^\d*\.?\d+$/.test(component)) {
-                console.log("Pure number");
-                // Case 1: Pure number (e.g., "255")
+            const componentDef = Object.values(converters[model].components).find((c) => c.index === index);
+            if (!componentDef) throw new Error(`Invalid component index for ${model}: ${index}`);
+            const isAngle = componentDef.loop === true;
+
+            if (/^-?\d*\.?\d+$/.test(component)) {
+                // Case 1: Pure number (e.g., "30", "-45.5")
                 return parseFloat(component);
-            } else if (/^\d*\.?\d+%$/.test(component)) {
-                console.log("Percentage");
-                // Case 2: Percentage (e.g., "50%")
+            } else if (/^-?\d*\.?\d+%$/.test(component)) {
+                // Case 2: Percentage (e.g., "50%", "-10%")
                 const percentage = parseFloat(component.slice(0, -1)) / 100;
-                const converter = converters[model];
-                const { min, max } = Object.values(converter.components).find((c) => c.index === index);
-                return min + percentage * (max - min);
+                if (isAngle) {
+                    return percentage * 360;
+                } else {
+                    const { min, max } = componentDef;
+                    return min + percentage * (max - min);
+                }
             } else if (component.startsWith("calc(") && component.endsWith(")")) {
-                console.log("Calc expression");
-                // Case 3: calc() expression (e.g., "calc(r * 2)")
+                // Case 3: Calc expression (e.g., "calc(r * 2)")
                 const expression = component.slice(5, -1).trim();
                 return evaluateExpression(expression, colorInstance, model);
-            } else {
-                console.log("Component name", model, component);
-                // Case 4: Component name (e.g., "r", "g", "b")
-                if (component in converters[model].components) {
-                    return colorInstance.in(model).get(component as Component<M>);
-                } else {
-                    throw new Error(`Invalid component name for ${model}: ${component}`);
+            } else if (component in converters[model].components) {
+                // Case 4: Component name (e.g., "h", "s")
+                return colorInstance.in(model).get(component as Component<M>);
+            } else if (isAngle) {
+                // Case 5: Angle with unit (e.g., "30deg", "0.5turn")
+                try {
+                    return parseAngle(component);
+                } catch {
+                    throw new Error(`Invalid angle format for ${model} component ${index}: ${component}`);
                 }
+            } else {
+                throw new Error(`Invalid component format for ${model} component ${index}: ${component}`);
             }
         };
 
@@ -2141,6 +2173,8 @@ class Color {
             return evaluatePostfix(postfix);
         };
 
+        color = color.toLowerCase();
+
         const funcNameMatch = color.match(/^(\w+)(?=\()/);
         if (!funcNameMatch) throw new Error(`"${color}" is not a valid relative format.`);
         const funcName = funcNameMatch[1];
@@ -2158,7 +2192,7 @@ class Color {
 
         if (funcName === "color") {
             const match = color.match(
-                new RegExp(`^color\\(from (?<color>${colorPatterns}) (?<space>${spaceNames}) (.*)\\)$`)
+                new RegExp(`^color\\(from\\s+(?<color>${colorPatterns}) (?<space>${spaceNames}) (.*)\\)$`)
             );
             if (!match) throw new Error(`"${color}" is not a valid relative format.`);
 
@@ -2176,7 +2210,8 @@ class Color {
                     `Invalid space for color(): ${type}\nSupported spaces are: ${Object.keys(spaceConverters).join(", ")}`
                 );
         } else {
-            const match = color.match(new RegExp(`^${funcName}\\(from (?<color>${colorPatterns}) (.*)\\)$`));
+            const match = color.match(new RegExp(`^${funcName}\\(from\\s+(?<color>${colorPatterns}) (.*)\\)$`));
+            console.log(match, color);
             if (!match) throw new Error(`"${color}" is not a valid relative format.`);
 
             const { color: colorMatch } = match.groups!;
@@ -2229,7 +2264,7 @@ class Color {
             components.push(parseComponent(tokens[i], colorInstance, type, i));
             i++;
         }
-        if (i < tokens.length && tokens[i] === "/") {
+        if (i < tokens.length && tokens[i] !== "/") {
             i++;
             if (i < tokens.length) {
                 components.push(parseComponent(tokens[i], colorInstance, type, i));
@@ -2260,12 +2295,14 @@ class Color {
      * @example
      * Color.parseColorMix("color-mix(in srgb shorter hue, red 40%, blue)");
      */
-    static parseColorMix(colorStr: string) {
-        if (!this.patterns["color-mix"].test(colorStr)) {
-            throw new Error(`"${colorStr}" is not a valid color-mix format.`);
+    static parseColorMix(color: string) {
+        color = color.toLowerCase();
+
+        if (!this.patterns["color-mix"].test(color)) {
+            throw new Error(`"${color}" is not a valid color-mix format.`);
         }
 
-        const inner = colorStr.slice(colorStr.indexOf("(") + 1, colorStr.lastIndexOf(")")).trim();
+        const inner = color.slice(color.indexOf("(") + 1, color.lastIndexOf(")")).trim();
         if (!inner.startsWith("in ")) {
             throw new Error('Invalid color-mix syntax; expected "in" keyword.'); // eslint-disable-line quotes
         }
@@ -2902,6 +2939,26 @@ class Color {
      */
     isLight(backgroundColor: string = "rgb(255, 255, 255)") {
         return !this.isDark(backgroundColor);
+    }
+
+    /**
+     * Checks if the current color is within the specified gamut.
+     *
+     * @param gamut - The color space to check against.
+     * @returns `true` if the color is within the gamut, `false` otherwise.
+     */
+    isInGamut(gamut: Space) {
+        const converter = converters[gamut];
+        const components = converter.fromXYZA(this.xyza);
+
+        for (const [, props] of Object.entries(converter.components)) {
+            const [value, min, max] = [components[props.index], props.min, props.max];
+            if (value < min || value > max) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
