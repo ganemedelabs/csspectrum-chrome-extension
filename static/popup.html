@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>CSSpectrum</title>
+        <link rel="stylesheet" href="popup.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+    </head>
+    <body>
+        <h2>CSSpectrum</h2>
+
+        <div class="toggle-container">
+            <label for="toggle" class="toggle-label">
+                <span class="fas fa-palette"></span> Enable Color Highlighting
+                <div class="toggle glowing" role="switch" aria-checked="false">
+                    <input type="checkbox" id="toggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+        </div>
+
+        <div class="toggle-container">
+            <label for="modernToggle" class="toggle-label">
+                <span class="fas fa-code"></span> Use Modern Color Syntax for RGB and HSL
+                <div class="toggle" role="switch" aria-checked="false">
+                    <input type="checkbox" id="modernToggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+            <div class="description">
+                e.g., <code>rgba(255, 0, 153, 0.8)</code> instead of <code>rgb(255 0 153 / 80%)</code> and
+                <code>hsla(150, 30%, 60%, 0.8)</code> instead of <code>hsl(150 30% 60% / 80%)</code>
+            </div>
+        </div>
+
+        <div class="toggle-container">
+            <label for="includeSpacesToggle" class="toggle-label">
+                <span class="fas fa-adjust"></span> Include color spaces in the cycle
+                <div class="toggle" role="switch" aria-checked="false">
+                    <input type="checkbox" id="includeSpacesToggle" aria-checked="false" />
+                    <span class="toggle-slider" tabindex="0"></span>
+                </div>
+            </label>
+            <div class="description">
+                e.g., <code>color(srgb 0.999 0.844 0.000)</code> and <code>color(display-p3 0.405 0.356 0.777)</code>
+            </div>
+        </div>
+
+        <div id="toggle-description" class="info-box" role="region">
+            <p><strong>Tip:</strong> Click on a highlighted color to convert it to the next format.</p>
+            <p>
+                <strong>Note:</strong> If the color string is a link, clicking on it will convert the color instead of
+                opening the link. To open the link, hold <code>CTRL</code> while clicking.
+            </p>
+        </div>
+
+        <script src="popup.bundle.js"></script>
+    </body>
+</html>
