@@ -3,6 +3,7 @@
     "version": "1.1.0",
     "scripts": {
         "build": "node build.js",
+        "publish": "node publish.js",
         "start": "webpack serve --open",
         "test": "jest",
         "lint": "eslint .",
@@ -20,6 +21,7 @@
         "@typescript-eslint/parser": "^8.16.0",
         "archiver": "^7.0.1",
         "copy-webpack-plugin": "^12.0.2",
+        "dotenv": "^16.4.7",
         "eslint": "^9.16.0",
         "eslint-config-prettier": "^9.1.0",
         "eslint-plugin-import": "^2.31.0",

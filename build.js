@@ -1,24 +1,17 @@
 /**
  * @file Build script for Chrome Extensions using Webpack. Handles production bundling,
- * version synchronization, deployment packaging, and optional auto-publishing to the
- * Chrome Web Store. Performs the following actions:
+ * version synchronization, and deployment packaging. Performs the following actions:
  *
  * 1. Reads project configuration (package.json, webpack.config.js)
  * 2. Validates extension manifest (manifest.json) for required fields and formats
+ *    - Extensions platform keys (manifest_version, name, version): Errors stop the build
+ *    - Chrome Web Store keys (description, icons): Warnings allow build but prevent ZIP generation
+ *    - Auto-adds manifest_version: 3 if missing; uses package.json name if manifest name is missing
  * 3. Synchronizes versions between package.json and manifest.json
  * 4. Creates distribution directory if missing
  * 5. Executes Webpack build
- * 6. Generates versioned ZIP archive of build artifacts if the version has changed
- * 7. Optionally uploads the new version to the Chrome Web Store if .env is configured
- * 8. Manages .gitignore entries for generated ZIP files
- *
- * Auto-Publishing to Chrome Web Store:
- * - To enable auto-publishing, create a `.env` file in the project root with:
- *   - `CLIENT_ID`: OAuth 2.0 Client ID from Google Cloud Console
- *   - `CLIENT_SECRET`: OAuth 2.0 Client Secret from Google Cloud Console
- *   - `REFRESH_TOKEN`: OAuth 2.0 Refresh Token from OAuth 2.0 Playground
- *   - `EXTENSION_ID`: Chrome Extension ID from Chrome Web Store Developer Dashboard
- * - If `.env` is missing or incomplete, the script generates the ZIP for manual upload.
+ * 6. Generates versioned ZIP archive of build artifacts if the version has changed and no warnings exist
+ * 7. Manages .gitignore entries for generated ZIP files
  *
  * @module BuildScript
  * @requires child_process/execSync
@@ -52,100 +45,109 @@ function blue(text) {
 }
 
 /**
- * Fetches an access token for Chrome Web Store API using OAuth 2.0 credentials.
- * @returns {Promise<string>} Access token
- */
-async function getAccessToken() {
-    const { CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN } = process.env;
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            refresh_token: REFRESH_TOKEN,
-            grant_type: "refresh_token",
-        }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error_description || "Failed to get access token");
-    return data.access_token;
-}
-
-/**
- * Uploads the ZIP file to the Chrome Web Store.
- * @param {string} zipFilePath - Path to the ZIP file
- * @param {string} extensionId - Chrome Extension ID
- */
-async function uploadToChromeWebStore(zipFilePath, extensionId) {
-    const accessToken = await getAccessToken();
-    const apiUrl = `https://www.googleapis.com/upload/chromewebstore/v1.1/items/${extensionId}`;
-    const headers = {
-        Authorization: `Bearer ${accessToken}`,
-        "x-goog-api-version": "2",
-        "Content-Type": "application/zip",
-    };
-    const response = await fetch(apiUrl, {
-        method: "PUT",
-        headers,
-        body: fs.readFileSync(zipFilePath),
-    });
-    const result = await response.json();
-    if (response.ok) {
-        console.log(`✅ Successfully uploaded ${green(path.basename(zipFilePath))} to Chrome Web Store:`, result);
-    } else {
-        throw new Error(`Upload failed: ${JSON.stringify(result)}`);
-    }
-}
-
-/**
  * Validates the manifest.json for required fields and formats.
  * @param {object} manifestJson - Parsed manifest.json content
- * @returns {string[]} Array of validation errors
+ * @param {object} packageJson - Parsed package.json content
+ * @param {string} manifestPath - Path to manifest.json
+ * @returns {object} { errors: string[], warnings: string[] }
  */
-function validateManifest(manifestJson) {
-    const errors = [];
-    if (!manifestJson.name) errors.push("Missing required 'name' field");
-    else if (typeof manifestJson.name !== "string") errors.push("'name' must be a string");
-    else if (manifestJson.name.length > 75)
-        errors.push(`'name' exceeds 75 characters (current: ${manifestJson.name.length})`);
+function validateManifest(manifestJson, packageJson, manifestPath) {
+    let errors = [];
+    let warnings = [];
+    let needsSave = false;
 
-    if (!manifestJson.version) errors.push("Missing required 'version' field");
-    else {
+    if (!("manifest_version" in manifestJson)) {
+        manifestJson.manifest_version = 3;
+        needsSave = true;
+        console.log("ℹ️  Added manifest_version: 3");
+    } else if (typeof manifestJson.manifest_version !== "number" || manifestJson.manifest_version !== 3) {
+        errors.push("manifest_version must be the integer 3");
+    }
+
+    if (!("name" in manifestJson)) {
+        if (packageJson.name && typeof packageJson.name === "string") {
+            manifestJson.name = packageJson.name;
+            needsSave = true;
+            console.log(`ℹ️  Added name from package.json: ${packageJson.name}`);
+        } else {
+            errors.push("Missing required 'name' field");
+        }
+    } else {
+        if (typeof manifestJson.name !== "string") {
+            errors.push("'name' must be a string");
+        } else if (manifestJson.name.length > 75) {
+            errors.push(`'name' exceeds 75 characters (current: ${manifestJson.name.length})`);
+        }
+    }
+
+    if (!("version" in manifestJson)) {
+        errors.push("Missing required 'version' field");
+    } else {
         const versionParts = String(manifestJson.version).split(".");
-        if (versionParts.length < 1 || versionParts.length > 4)
+        if (versionParts.length < 1 || versionParts.length > 4) {
             errors.push("Version must have 1 to 4 dot-separated integers");
-        else {
+        } else {
             let allZero = true;
             for (const part of versionParts) {
-                if (!/^\d+$/.test(part)) errors.push("Version parts must be integers");
+                if (!/^\d+$/.test(part)) {
+                    errors.push("Version parts must be integers");
+                    break;
+                }
                 const num = parseInt(part, 10);
                 if (num !== 0) allZero = false;
-                if (num < 0 || num > 65535) errors.push("Version integers must be between 0 and 65535");
-                if (num !== 0 && part.startsWith("0")) errors.push("Non-zero version integers cannot start with 0");
+                if (num < 0 || num > 65535) {
+                    errors.push("Version integers must be between 0 and 65535");
+                    break;
+                }
+                if (num !== 0 && part.startsWith("0")) {
+                    errors.push("Non-zero version integers cannot start with 0");
+                    break;
+                }
             }
-            if (allZero) errors.push("Version cannot be all zeros (e.g., 0 or 0.0.0.0)");
+            if (allZero) {
+                errors.push("Version cannot be all zeros (e.g., 0 or 0.0.0.0)");
+            }
         }
     }
 
-    if (!manifestJson.icons || typeof manifestJson.icons !== "object" || Array.isArray(manifestJson.icons))
-        errors.push("Missing or invalid 'icons' field - must be an object");
-    else {
-        if (!manifestJson.icons["128"]) errors.push("Missing required 128x128 icon in 'icons' object");
-        const supportedFormats = [".png", ".bmp", ".gif", ".ico", ".jpg", ".jpeg"];
-        for (const [size, path] of Object.entries(manifestJson.icons)) {
-            if (typeof path !== "string") errors.push(`Icon path for size ${size} must be a string`);
-            else if (!supportedFormats.some((format) => path.toLowerCase().endsWith(format)))
-                errors.push(`Icon path for size ${size} must end in supported format (${supportedFormats.join(", ")})`);
+    if (!("description" in manifestJson)) {
+        warnings.push("Missing 'description' field required by Chrome Web Store");
+    } else {
+        if (typeof manifestJson.description !== "string") {
+            warnings.push("'description' must be a string");
+        } else if (manifestJson.description.length > 132) {
+            warnings.push(`'description' exceeds 132 characters (current: ${manifestJson.description.length})`);
         }
     }
 
-    if (!manifestJson.description) errors.push("Missing required 'description' field");
-    else if (typeof manifestJson.description !== "string") errors.push("'description' must be a string");
-    else if (manifestJson.description.length > 132)
-        errors.push(`'description' exceeds 132 characters (current: ${manifestJson.description.length})`);
+    if (!("icons" in manifestJson)) {
+        warnings.push("Missing 'icons' field required by Chrome Web Store");
+    } else {
+        if (typeof manifestJson.icons !== "object" || Array.isArray(manifestJson.icons)) {
+            warnings.push("'icons' must be an object");
+        } else {
+            if (!manifestJson.icons["128"]) {
+                warnings.push("Missing required 128x128 icon in 'icons' object");
+            }
+            const supportedFormats = [".png", ".bmp", ".gif", ".ico", ".jpg", ".jpeg"];
+            for (const [size, iconPath] of Object.entries(manifestJson.icons)) {
+                if (typeof iconPath !== "string") {
+                    warnings.push(`Icon path for size ${size} must be a string`);
+                } else if (!supportedFormats.some((format) => iconPath.toLowerCase().endsWith(format))) {
+                    warnings.push(
+                        `Icon path for size ${size} must end in supported format (${supportedFormats.join(", ")})`
+                    );
+                }
+            }
+        }
+    }
 
-    return errors;
+    if (needsSave) {
+        fs.writeFileSync(manifestPath, JSON.stringify(manifestJson, null, 2));
+        console.log("ℹ️  Updated manifest.json with added fields");
+    }
+
+    return { errors, warnings };
 }
 
 /**
@@ -253,7 +255,7 @@ function runWebpackBuild() {
     } catch (error) {
         if (error.stdout) printWebpackOutput(error.stdout);
         if (error.stderr) printWebpackOutput(error.stderr);
-        throw new Error(red("Webpack build failed"));
+        throw new Error(red("❌ Webpack build failed"));
     }
 }
 
@@ -301,14 +303,6 @@ function manageGitignore(packageName) {
 }
 
 /**
- * Checks if Chrome Web Store credentials are available.
- * @returns {boolean} True if all required env vars are set
- */
-function hasChromeWebStoreCredentials() {
-    return process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REFRESH_TOKEN && process.env.EXTENSION_ID;
-}
-
-/**
  * Main build script orchestrator.
  */
 async function main() {
@@ -317,11 +311,17 @@ async function main() {
         const { packageJson, outputDir, manifestJson, manifestJsonPath } = loadConfigs();
 
         // Validate manifest
-        const manifestErrors = validateManifest(manifestJson);
-        if (manifestErrors.length > 0) {
-            console.error(red("❌ Manifest validation failed:"));
-            manifestErrors.forEach((error) => console.error(red(`  - ${error}`)));
+        const { errors, warnings } = validateManifest(manifestJson, packageJson, manifestJsonPath);
+
+        if (errors.length > 0) {
+            console.error(red("❌ Manifest validation failed with errors:"));
+            errors.forEach((error) => console.error(red(`  - ${error}`)));
             process.exit(1);
+        }
+
+        if (warnings.length > 0) {
+            console.warn("⚠️ Manifest validation warnings:");
+            warnings.forEach((warning) => console.warn(`  - ${warning}`));
         }
 
         // Synchronize versions
@@ -341,40 +341,31 @@ async function main() {
         // Run Webpack build
         runWebpackBuild();
 
-        // Determine ZIP file details
-        const packageName = manifestJson.name.toLowerCase().replace(/\s+/g, "-");
-        const formattedVersion = `v${highestVersion.replace(/\./g, "-")}`;
-        const zipFileName = `${packageName}-${formattedVersion}.zip`;
-        const zipFilePath = path.join(__dirname, zipFileName);
+        // If there are no warnings, generate ZIP
+        if (warnings.length === 0) {
+            // Determine ZIP file details
+            const packageName = manifestJson.name.toLowerCase().replace(/\s+/g, "-");
+            const formattedVersion = `v${highestVersion.replace(/\./g, "-")}`;
+            const zipFileName = `${packageName}-${formattedVersion}.zip`;
+            const zipFilePath = path.join(__dirname, zipFileName);
 
-        // Create ZIP and upload if version changed
-        if (!fs.existsSync(zipFilePath)) {
-            await createZipArchive(outputDir, zipFilePath);
-            const oldZips = glob.sync(`${packageName}-v*.zip`).filter((file) => file !== zipFileName);
-            oldZips.forEach((file) => fs.unlinkSync(file));
-            if (oldZips.length > 0) {
-                console.log(`🗑️  Removed ${oldZips.length} old ZIP file(s)`);
-            }
-            manageGitignore(packageName);
-
-            if (hasChromeWebStoreCredentials()) {
-                try {
-                    await uploadToChromeWebStore(zipFilePath, process.env.EXTENSION_ID);
-                } catch (error) {
-                    console.error(
-                        red(`❌ Error uploading ${green(zipFileName)} to Chrome Web Store: ${error.message}`)
-                    );
+            // Create ZIP if it doesn't exist
+            if (!fs.existsSync(zipFilePath)) {
+                await createZipArchive(outputDir, zipFilePath);
+                const oldZips = glob.sync(`${packageName}-v*.zip`).filter((file) => file !== zipFileName);
+                oldZips.forEach((file) => fs.unlinkSync(file));
+                if (oldZips.length > 0) {
+                    console.log(`🗑️  Removed ${oldZips.length} old ZIP file(s)`);
                 }
+                manageGitignore(packageName);
             } else {
-                console.log(
-                    `ℹ️  Chrome Web Store credentials not found. ${green(zipFileName)} is ready for manual upload.`
-                );
+                console.log(`✅ ZIP ${green(zipFileName)} for current version exists. Version unchanged.`);
             }
         } else {
-            console.log(`✅ ZIP ${green(zipFileName)} for current version exists. Version unchanged.`);
+            console.log("⚠️ Skipping ZIP generation due to manifest warnings.");
         }
 
-        console.log("🎉 Done.");
+        console.log("🎉 Build completed successfully.");
     } catch (error) {
         console.error(red(`❌ Error: ${error.message}`));
         process.exit(1);
